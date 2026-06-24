@@ -1,6 +1,6 @@
-import { runInNewContext } from 'node:vm'
+import { Worker } from 'node:worker_threads'
 
-export type FailCategory = 'assertion' | 'runtime' | 'timeout'
+export type FailCategory = 'assertion' | 'runtime' | 'timeout' | 'memory' | 'async'
 
 export interface SandboxResult {
   ok: boolean
@@ -8,33 +8,41 @@ export interface SandboxResult {
   error?: string
 }
 
-// Run a skill's implementation as `run(input)` and execute its acceptance test.
-// v1 isolation: node:vm + hard timeout. NOTE: node:vm is NOT a security boundary
-// (escapable). Adequate for verifying the agent's OWN generated skills; harden
-// (isolated-vm / subprocess) before executing untrusted third-party skills in a
-// hosted multi-tenant tier.
+const WORKER_URL = new URL('./sandbox-worker.mjs', import.meta.url)
+
+// Run the acceptance test in an isolated worker thread with a hard memory cap
+// (maxOldGenerationSizeMb) and a host-enforced timeout. An OOM/runaway skill kills the
+// WORKER, never the host process. This is "isolated with a hard memory cap and timeout
+// kill" -- NOT a hardened multi-tenant security boundary (v1.1 upgrade path: isolated-vm).
 export function runAcceptance(
   implementation: string,
   acceptanceTest: string,
   timeoutMs = 2000,
-): SandboxResult {
-  const harness =
-    'const run = (input) => { ' +
-    implementation +
-    ' };\n' +
-    'const assert = (cond, msg) => { if (!cond) { const e = new Error(msg || "ACCEPTANCE_FAILED"); e.name = "AcceptanceError"; throw e; } };\n' +
-    acceptanceTest +
-    ';\ntrue;'
-  try {
-    runInNewContext(harness, {}, { timeout: timeoutMs })
-    return { ok: true }
-  } catch (e) {
-    const err = e as { message?: string; name?: string }
-    const msg = String(err?.message ?? e)
-    if (/timed out/i.test(msg)) return { ok: false, category: 'timeout', error: msg }
-    if (err?.name === 'AcceptanceError' || /ACCEPTANCE_FAILED/.test(msg)) {
-      return { ok: false, category: 'assertion', error: msg }
+): Promise<SandboxResult> {
+  return new Promise((resolve) => {
+    let settled = false
+    const worker = new Worker(WORKER_URL, {
+      workerData: { implementation, acceptanceTest, timeoutMs },
+      resourceLimits: { maxOldGenerationSizeMb: 64 },
+    })
+    const finish = (r: SandboxResult) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      worker.terminate()
+      resolve(r)
     }
-    return { ok: false, category: 'runtime', error: msg }
-  }
+    const timer = setTimeout(
+      () => finish({ ok: false, category: 'timeout', error: 'execution timed out (host kill)' }),
+      timeoutMs + 1000,
+    )
+    worker.on('message', (m: SandboxResult) => finish(m))
+    worker.on('error', (err: Error) => {
+      const msg = String(err?.message ?? err)
+      finish({ ok: false, category: /memory|heap|allocation/i.test(msg) ? 'memory' : 'runtime', error: msg })
+    })
+    worker.on('exit', (code: number) => {
+      if (code !== 0) finish({ ok: false, category: 'memory', error: `worker exited with code ${code}` })
+    })
+  })
 }
