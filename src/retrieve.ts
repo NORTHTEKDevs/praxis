@@ -38,10 +38,10 @@ export async function recall(
   const start = Date.now()
   const q = (query ?? '').slice(0, 2000) // bound the O(n) embed + stored task
   const qemb = await embedder.embed(q)
-  const verified = store.listByStatus('verified')
 
-  const scored = verified
-    .filter((s) => s.kind === 'positive' && s.tier === 'hot' && s.embedding.length > 0)
+  const scored = store
+    .listVerifiedHot()
+    .filter((s) => s.embedding.length > 0)
     .map((s) => ({
       s,
       score:
@@ -66,8 +66,9 @@ export async function recall(
   for (const s of selected) store.recordRetrieval(s.id, q, Date.now())
 
   const negThreshold = opts.negativeThreshold ?? 0.7
-  const negatives = verified
-    .filter((s) => s.kind === 'negative' && s.embedding.length > 0)
+  const negatives = store
+    .listVerifiedNegatives()
+    .filter((s) => s.embedding.length > 0)
     .map((s) => ({ s, sim: cosine(qemb, s.embedding) }))
     .filter((x) => x.sim > negThreshold)
     .sort((a, b) => b.sim - a.sim)

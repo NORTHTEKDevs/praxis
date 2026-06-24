@@ -54,6 +54,19 @@ describe('verify gate adversarial suite', () => {
     assert.notEqual(r.status, 'verified')
   })
 
+  test('acceptance test cannot sniff globalThis.__impl to defeat the counter-example probe', async () => {
+    // reads __impl to detect the probe stub; with __impl deleted from the global, the sniff is
+    // inert in both runs and the probe catches the `|| ...` vacuity.
+    const at = 'assert(run(3) === 6 || !String(globalThis.__impl).includes("praxisStub"))'
+    const r = await verifySkill(mk('return 0', at))
+    assert.notEqual(r.status, 'verified')
+  })
+
+  test('an acceptance test whose assert never executes does not verify (ac===0)', async () => {
+    const r = await verifySkill(mk('return 1', 'if (false) { assert(run(1) === 1) }'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('100 rapid verifications all complete (no worker leak)', async () => {
     const results: string[] = []
     for (let i = 0; i < 100; i++) {

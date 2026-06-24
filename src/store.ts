@@ -96,6 +96,19 @@ export class SkillStore {
     return rows.map((r) => this.rowToSkill(r))
   }
 
+  // Filter in SQL so recall's compute cost is O(hot-set), not O(all-verified).
+  listVerifiedHot(): Skill[] {
+    const rows = this.db
+      .prepare("SELECT * FROM skills WHERE status = 'verified' AND kind = 'positive' AND tier = 'hot'")
+      .all()
+    return rows.map((r) => this.rowToSkill(r))
+  }
+
+  listVerifiedNegatives(): Skill[] {
+    const rows = this.db.prepare("SELECT * FROM skills WHERE status = 'verified' AND kind = 'negative'").all()
+    return rows.map((r) => this.rowToSkill(r))
+  }
+
   all(): Skill[] {
     const rows = this.db.prepare('SELECT * FROM skills').all()
     return rows.map((r) => this.rowToSkill(r))

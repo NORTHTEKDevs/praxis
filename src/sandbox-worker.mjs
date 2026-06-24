@@ -36,8 +36,16 @@ __outcome = (() => {
   // an unverified sub-skill body, nor lift __maxDepth.
   const __subs = globalThis.__subs;
   const __maxDepth = globalThis.__maxDepth;
+  const __impl = globalThis.__impl;
+  const __accept = globalThis.__accept;
+  const __input = globalThis.__input;
+  const __mode = globalThis.__mode;
   delete globalThis.__subs;
   delete globalThis.__maxDepth;
+  delete globalThis.__impl;
+  delete globalThis.__accept;
+  delete globalThis.__input;
+  delete globalThis.__mode;
   let ac = 0;
   const af = [];
   const assert = (cond, msg) => { ac++; if (!cond) { af.push(String(msg || "ACCEPTANCE_FAILED")); const e = new Error("ACCEPTANCE_FAILED"); e.name = "AcceptanceError"; throw e; } };
