@@ -100,6 +100,13 @@ export class SkillStore {
     return rows.map((r) => this.rowToSkill(r))
   }
 
+  findVerifiedByName(name: string): Skill | undefined {
+    const rows = this.db
+      .prepare("SELECT * FROM skills WHERE name = ? AND status = 'verified' ORDER BY utilityScore DESC LIMIT 1")
+      .all(name)
+    return rows.length ? this.rowToSkill(rows[0]) : undefined
+  }
+
   delete(id: string): void {
     this.db.prepare('DELETE FROM skills WHERE id = ?').run(id)
   }

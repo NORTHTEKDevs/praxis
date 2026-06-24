@@ -21,7 +21,7 @@ export interface VerifyResult {
 //   - async/Promise implementation   -> quarantined (would pass a truthiness check vacuously)
 export async function verifySkill(
   skill: VerifyInput,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; subImpls?: Record<string, string>; maxDepth?: number } = {},
 ): Promise<VerifyResult> {
   if (!skill.acceptanceTest || !skill.acceptanceTest.trim()) {
     return { status: 'quarantined', reason: 'no acceptance test' }
@@ -29,7 +29,11 @@ export async function verifySkill(
   if (computeCheckStrength(skill.acceptanceTest) < 1) {
     return { status: 'quarantined', reason: 'acceptance test too weak (no concrete expected value)' }
   }
-  const r = await runAcceptance(skill.implementation, skill.acceptanceTest, opts.timeoutMs ?? 2000)
+  const r = await runAcceptance(skill.implementation, skill.acceptanceTest, {
+    timeoutMs: opts.timeoutMs ?? 2000,
+    subImpls: opts.subImpls,
+    maxDepth: opts.maxDepth,
+  })
   if (r.ok) return { status: 'verified' }
   if (r.category === 'assertion') return { status: 'refuted', reason: r.error }
   return { status: 'quarantined', reason: r.error }

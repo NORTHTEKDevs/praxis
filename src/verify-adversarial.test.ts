@@ -22,8 +22,11 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'quarantined')
   })
 
-  test('run redefinition attempt does not verify', async () => {
-    const r = await verifySkill(mk('run = () => 42; return 1', 'assert(run(1) === 1)'))
+  test('run redefinition cannot forge the acceptance result', async () => {
+    // The implementation tries to reassign run() to return 999 so a 999-check passes.
+    // The acceptance test's run() is the fixed outer run; the reassignment is a harmless
+    // global, so the real result (input) is checked -> refuted, not verified.
+    const r = await verifySkill(mk('run = () => 999; return input', 'assert(run(3) === 999)'))
     assert.notEqual(r.status, 'verified')
   })
 

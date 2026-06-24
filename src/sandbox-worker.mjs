@@ -1,30 +1,63 @@
 // Plain ESM worker (no TypeScript -> loads in a Worker without type-stripping flags).
-// Runs a skill's implementation as run(input) and executes its acceptance test inside
-// node:vm, isolated in this worker thread with a hard memory cap (set by the host via
-// resourceLimits) and a sync timeout. The host terminates this worker on its own clock.
+// Two modes:
+//   verify: run the acceptance test; report ok / assertion / runtime / timeout / async
+//   exec:   run the implementation on an input; report the returned value
+// Both inject a synchronous call(name, input) resolver so COMPOSED skills (whose code
+// calls verified sub-skills by name) work in either mode. Isolation: this runs inside a
+// worker thread with a host-set memory cap + timeout (host terminates on its own clock).
 //
 // Trust design:
-//  - assert() records the failure to the sandbox object BEFORE throwing, so a malicious
-//    acceptance test that wraps assert in try/catch cannot swallow the failure: the host
-//    reads sandbox.__af afterward.
-//  - run() rejects async implementations (a pending Promise is truthy and would pass a
-//    truthiness check vacuously) -> verify-before-keep stays honest.
-//  - vm is NOT a hardened security boundary; the worker + memory cap + timeout protect the
-//    HOST from OOM/runaway, which is the v1 threat model (trusted user's own agent code).
+//  - assert() records the failure to the sandbox BEFORE throwing, so a try/catch in the
+//    acceptance test cannot swallow it.
+//  - run() rejects async implementations (a pending Promise would pass a truthiness check).
+//  - the implementation/acceptance test are built with `new Function`, so they run in the
+//    context global scope and cannot reach into the worker's module scope.
 import { parentPort, workerData } from 'node:worker_threads'
 import vm from 'node:vm'
 
-const { implementation, acceptanceTest, timeoutMs } = workerData
-const sandbox = { __af: [], __ac: 0 }
-const harness =
-  'const __run = (input) => { ' + implementation + ' };' +
-  'const run = (input) => { const r = __run(input); if (r && typeof r.then === "function") { const e = new Error("ASYNC_SKILL"); e.name = "AsyncError"; throw e; } return r; };' +
-  'const assert = (cond, msg) => { __ac++; if (!cond) { __af.push(String(msg || "ACCEPTANCE_FAILED")); throw new Error("ACCEPTANCE_FAILED"); } };' +
-  acceptanceTest + ';true;'
+const { mode, implementation, acceptanceTest, input, subImpls = {}, maxDepth = 5, timeoutMs } = workerData
+
+const sandbox = {
+  __af: [],
+  __ac: 0,
+  __subs: subImpls,
+  __maxDepth: maxDepth,
+  __impl: implementation,
+  __accept: acceptanceTest ?? '',
+  __input: input,
+  __result: undefined,
+  __mode: mode,
+}
+
+const code = `
+const __subFns = {};
+let __depth = 0;
+const call = (name, inp) => {
+  if (!Object.prototype.hasOwnProperty.call(__subs, name)) throw new Error("unknown sub-skill: " + name);
+  if (__depth >= __maxDepth) throw new Error("max composition depth exceeded");
+  if (!__subFns[name]) __subFns[name] = new Function("input", "call", __subs[name]);
+  __depth++;
+  try { return __subFns[name](inp, call); } finally { __depth--; }
+};
+const __run = new Function("input", "call", __impl);
+const run = (input) => {
+  const r = __run(input, call);
+  if (r && typeof r.then === "function") { const e = new Error("ASYNC_SKILL"); e.name = "AsyncError"; throw e; }
+  return r;
+};
+const assert = (cond, msg) => { __ac++; if (!cond) { __af.push(String(msg || "ACCEPTANCE_FAILED")); throw new Error("ACCEPTANCE_FAILED"); } };
+if (__mode === "exec") {
+  __result = run(__input);
+} else {
+  const __acc = new Function("run", "assert", "call", __accept);
+  __acc(run, assert, call);
+}
+`
 
 try {
-  vm.runInNewContext(harness, sandbox, { timeout: timeoutMs })
-  if (sandbox.__af.length > 0) parentPort.postMessage({ ok: false, category: 'assertion', error: sandbox.__af[0] })
+  vm.runInNewContext(code, sandbox, { timeout: timeoutMs })
+  if (mode === 'exec') parentPort.postMessage({ ok: true, value: sandbox.__result })
+  else if (sandbox.__af.length > 0) parentPort.postMessage({ ok: false, category: 'assertion', error: sandbox.__af[0] })
   else if (sandbox.__ac === 0) parentPort.postMessage({ ok: false, category: 'runtime', error: 'no assertions executed' })
   else parentPort.postMessage({ ok: true })
 } catch (e) {
