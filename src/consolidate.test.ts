@@ -115,4 +115,32 @@ describe('consolidate + reindex', () => {
     assert.ok(r.flagged >= 1)
     assert.equal(verifiedCount(), before)
   })
+
+  test('merge-fold cascade-quarantines a composed dependent of a folded sub-skill', async () => {
+    await addVerified(store, { name: 'leaf', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 10 })
+    await addVerified(store, { name: 'leaf', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 10 })
+    const lid = await addVerified(store, { name: 'leaf', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 0 })
+    const cid = await addVerified(store, { name: 'composer', impl: 'return call("leaf", input)', test: 'assert(run("a") === "a!")' })
+    store.addDep(cid, lid)
+    await consolidate(store, embedder)
+    assert.equal(store.get(lid)?.status, 'archived')
+    assert.equal(store.get(cid)?.status, 'quarantined')
+  })
+
+  test('cold-eviction cascade-quarantines a composed dependent of an evicted sub-skill', async () => {
+    const sub = captureSkill({ name: 'sub', interface: '(s)->s', implementation: 'return input', acceptanceTest: 'assert(run("a") === "a")', task: 'sub' })
+    sub.status = 'verified'
+    sub.tier = 'cold'
+    sub.utilityScore = 0
+    sub.embedding = await embedder.embed('sub (s)->s sub')
+    const subId = store.insert(sub)
+    const comp = captureSkill({ name: 'comp', interface: '(s)->s', implementation: 'return call("sub", input)', acceptanceTest: 'assert(run("a") === "a")', task: 'comp' })
+    comp.status = 'verified'
+    comp.embedding = await embedder.embed('comp (s)->s comp')
+    const compId = store.insert(comp)
+    store.addDep(compId, subId)
+    await consolidate(store, embedder)
+    assert.equal(store.get(subId)?.status, 'archived')
+    assert.equal(store.get(compId)?.status, 'quarantined')
+  })
 })

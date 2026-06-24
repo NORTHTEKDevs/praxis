@@ -103,7 +103,7 @@ export class SkillStore {
 
   findVerifiedByName(name: string): Skill | undefined {
     const rows = this.db
-      .prepare("SELECT * FROM skills WHERE name = ? AND status = 'verified' ORDER BY utilityScore DESC LIMIT 1")
+      .prepare("SELECT * FROM skills WHERE name = ? AND status = 'verified' AND kind = 'positive' ORDER BY utilityScore DESC LIMIT 1")
       .all(name)
     return rows.length ? this.rowToSkill(rows[0]) : undefined
   }

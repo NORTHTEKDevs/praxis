@@ -131,7 +131,10 @@ export async function consolidate(
     for (const s of store.listByTier('cold')) {
       if (s.status !== 'verified' || s.pinned) continue
       if (s.utilityScore < evictT) {
-        if (!dryRun) store.updateStatus(s.id, 'archived')
+        if (!dryRun) {
+          store.updateStatus(s.id, 'archived')
+          quarantineCascade(store, s.id) // a composed skill depending on an evicted sub must not stay verified
+        }
         evicted++
       }
     }
