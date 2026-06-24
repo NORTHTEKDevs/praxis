@@ -81,12 +81,18 @@ if (!posted) {
     const m = o.errorMessage || ''
     if (o.errorName === 'AsyncError' || /ASYNC_SKILL/.test(m)) return 'async'
     if (/timed out/i.test(m)) return 'timeout'
-    if (o.errorName === 'AcceptanceError' || o.af.length > 0) return 'assertion'
+    if (o.af.length > 0 || (o.errorName === 'AcceptanceError' && o.ac > 0)) return 'assertion'
     return 'runtime'
   }
   if (mode === 'exec') {
     if (o.threw) parentPort.postMessage({ ok: false, category: classify(), error: o.errorMessage })
-    else parentPort.postMessage({ ok: true, value: o.result })
+    else {
+      try {
+        parentPort.postMessage({ ok: true, value: o.result })
+      } catch (e) {
+        parentPort.postMessage({ ok: false, category: 'runtime', error: 'result not structured-cloneable: ' + String((e && e.message) || e) })
+      }
+    }
   } else if (o.af.length > 0) {
     parentPort.postMessage({ ok: false, category: 'assertion', error: o.af[0] })
   } else if (o.threw) {

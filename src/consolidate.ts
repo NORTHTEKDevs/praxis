@@ -7,7 +7,7 @@ import { EMBEDDER_VERSION } from './skill.ts'
 import type { Skill } from './skill.ts'
 import { Semaphore } from './concurrency.ts'
 import { retier, DEFAULT_HOT_CAP } from './utility.ts'
-import { resolveComposition } from './composition.ts'
+import { resolveComposition, quarantineCascade } from './composition.ts'
 
 export interface ConsolidateResult {
   merged: number
@@ -121,8 +121,12 @@ export async function consolidate(
     }
 
     // apply archival AFTER all clusters resolve, so an earlier merge does not hide a
-    // sub-skill a later cluster's keeper composition depends on.
-    if (!dryRun) for (const id of toArchive) store.updateStatus(id, 'archived')
+    // sub-skill a later cluster's keeper composition depends on. Then cascade-quarantine any
+    // composed skill that depended (by id) on a now-archived skill.
+    if (!dryRun) {
+      for (const id of toArchive) store.updateStatus(id, 'archived')
+      for (const id of toArchive) quarantineCascade(store, id)
+    }
 
     for (const s of store.listByTier('cold')) {
       if (s.status !== 'verified' || s.pinned) continue

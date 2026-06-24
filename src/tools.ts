@@ -52,9 +52,9 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'recall_skills',
       description: 'Retrieve the top-k verified skills for a query, plus known failure modes (negatives) to check before retrying.',
-      inputSchema: { type: 'object', required: ['query'], properties: { query: str('task description'), k: { type: 'number', maximum: 50 }, tokenBudget: { type: 'number' }, maxNegatives: { type: 'number', maximum: 20, description: 'max known-failure modes to return (default 1)' } } },
+      inputSchema: { type: 'object', required: ['query'], properties: { query: str('task description'), k: { type: 'number', minimum: 1, maximum: 50 }, tokenBudget: { type: 'number' }, maxNegatives: { type: 'number', maximum: 20, description: 'max known-failure modes to return (default 1)' } } },
       handler: async (a) => {
-        const k = Math.min((a.k as number) ?? 5, 50)
+        const k = Math.max(1, Math.min((a.k as number) ?? 5, 50))
         const maxNegatives = Math.min((a.maxNegatives as number) ?? 1, 20)
         const r = await px.recall(String(a.query), { k, tokenBudget: a.tokenBudget as number, maxNegatives })
         return { skills: r.selected, negatives: r.negatives, costEstimate: r.costEstimate }

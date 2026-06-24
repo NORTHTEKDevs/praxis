@@ -84,7 +84,8 @@ export class Praxis {
 
     if (v.status === 'verified') {
       const d = await maybeMerge(this.store, candidate, this.embedder)
-      if (d.action === 'inserted') for (const dep of deps) this.store.addDep(d.id, dep)
+      // register deps whether freshly inserted OR reinforced (addDep is INSERT OR IGNORE).
+      if (d.action === 'inserted' || d.action === 'reinforced') for (const dep of deps) this.store.addDep(d.id, dep)
       retier(this.store, this.hotCap)
       return { id: d.id, status: 'verified', reason: d.action === 'inserted' ? undefined : d.action }
     }
