@@ -25,8 +25,8 @@ async function add(store: SkillStore, opts: AddOpts): Promise<string> {
     implementation: 'return input',
     acceptanceTest: 'assert(run(1) === 1)',
     task: opts.task,
-    kind: opts.kind,
   })
+  if (opts.kind) s.kind = opts.kind
   s.embedding = await embedder.embed(`${s.name} ${s.interface} ${s.provenance.task}`)
   s.status = opts.status ?? 'verified'
   s.utilityScore = opts.utility ?? 0

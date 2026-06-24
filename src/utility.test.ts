@@ -91,4 +91,13 @@ describe('utility scoring + tiering', () => {
     const withGen = utilityScore(store.get(id)!, store.distinctRetrievalTasks(id))
     assert.ok(withGen > base)
   })
+
+  test('generality lifts a skill into the hot tier via retier (batched count is wired)', () => {
+    const a = addVerified({ name: 'a' })
+    addVerified({ name: 'b' })
+    addVerified({ name: 'c' })
+    for (const t of ['t1', 't2', 't3', 't4', 't5']) store.recordRetrieval(a, t, 1)
+    retier(store, 1)
+    assert.equal(store.get(a)?.tier, 'hot')
+  })
 })

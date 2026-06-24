@@ -32,6 +32,12 @@ describe('verify gate adversarial suite', () => {
     assert.ok(r.status === 'quarantined' || r.status === 'refuted')
   })
 
+  test('a tampering acceptance test cannot spoof a pass', async () => {
+    // swallow a failing assert, then try to clear the (now closure-private) failure record.
+    const r = await verifySkill(mk('return 1', 'try { assert(run(1) === 999) } catch (e) {} __af = []; __ac = 99'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('100 rapid verifications all complete (no worker leak)', async () => {
     const results: string[] = []
     for (let i = 0; i < 100; i++) {

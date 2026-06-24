@@ -40,4 +40,17 @@ describe('captureSkill', () => {
     assert.equal(s.provenance.model, 'unknown')
     assert.deepEqual(s.capabilities, [])
   })
+
+  test('field lengths are bounded', () => {
+    const s = captureSkill({
+      name: 'x'.repeat(300),
+      interface: '',
+      implementation: 'y'.repeat(60000),
+      acceptanceTest: 'assert(run(1) === 1)',
+      task: 'z'.repeat(3000),
+    })
+    assert.equal(s.name.length, 200)
+    assert.equal(s.implementation.length, 50000)
+    assert.equal(s.provenance.task.length, 2000)
+  })
 })

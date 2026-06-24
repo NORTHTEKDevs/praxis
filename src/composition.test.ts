@@ -44,7 +44,14 @@ describe('parseCalls', () => {
     assert.deepEqual(parseCalls('return `${ {a:1} }` + call("real", x)'), ['real'])
   })
 
-  test('ignores call() inside a regex literal', () => {
-    assert.deepEqual(parseCalls('if (/call("x")/.test(input)) return 1; return 0'), [])
+  test('detects a dependency after a division operator (no silent drop)', () => {
+    assert.deepEqual(parseCalls('return x / call("dep")'), ['dep'])
+    assert.deepEqual(parseCalls('return x/call("dep")'), ['dep'])
+  })
+
+  test('call() inside a regex literal is a fail-closed false positive (documented v1 limit)', () => {
+    // accepted: skill code should not contain call( inside a regex. It is flagged as a dep,
+    // which quarantines the skill (safe) rather than silently dropping a real dependency.
+    assert.deepEqual(parseCalls('return /call("x")/.test(input) ? 1 : 0'), ['x'])
   })
 })

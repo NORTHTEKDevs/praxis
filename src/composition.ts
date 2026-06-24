@@ -39,8 +39,12 @@ export function parseCalls(impl: string): string[] {
         if (c === '{') { f.depth++; i++; continue }
         if (c === '}') { if (f.depth === 0) stack.pop(); else f.depth--; i++; continue }
       }
-      // skip call() that is actually part of recall()/a regex literal (preceding /).
-      if (c === 'c' && (i === 0 || !/[\w$/]/.test(impl[i - 1]))) {
+      // word-boundary so recall()/myCall() do not match. NOTE: a call() inside a regex
+      // literal (e.g. /call("x")/) is a FALSE POSITIVE here -> the skill is quarantined
+      // (fails CLOSED, safe). We do NOT exclude a preceding '/', because that would silently
+      // DROP a real dependency after a division operator (x/call("dep")) - the dangerous
+      // direction. Regex-with-call() in skill code is the rare, safe-to-reject case.
+      if (c === 'c' && (i === 0 || !/[\w$]/.test(impl[i - 1]))) {
         const m = CALL_AT.exec(impl.slice(i))
         if (m) { names.add(m[2]); i += m[0].length; continue }
       }

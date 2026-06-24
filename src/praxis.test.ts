@@ -101,6 +101,16 @@ describe('Praxis integration', () => {
     await p.recordFailure({ task: 'x', approach: 'y', reason: 'z' })
     await assert.rejects(p.recordFailure({ task: 'x2', approach: 'y2', reason: 'z2' }), RateLimitError)
   })
+
+  test('remember ignores an injected kind:negative (coerced to positive)', async () => {
+    const r = await px.remember({ ...valid('inj', 'return 1', 'assert(run(1) === 1)'), kind: 'negative' } as never)
+    assert.equal(px.store.get(r.id)?.kind, 'positive')
+  })
+
+  test('reinforce rejects a negative record', async () => {
+    const id = await px.recordFailure({ task: 'parse json', approach: 'regex', reason: 'fails' })
+    await assert.rejects(px.reinforce(id, 'success'), /negative record/)
+  })
 })
 
 describe('RateLimiter', () => {

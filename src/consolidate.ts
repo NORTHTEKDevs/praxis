@@ -70,6 +70,7 @@ export async function consolidate(
 
     const verified = store.listByStatus('verified').filter((s) => s.kind === 'positive' && s.embedding.length > 0)
     const used = new Set<string>()
+    const toArchive: string[] = []
 
     for (const a of verified) {
       if (used.has(a.id)) continue
@@ -115,9 +116,13 @@ export async function consolidate(
         flagged++
         continue
       }
-      if (!dryRun) for (const o of others) store.updateStatus(o.id, 'archived')
+      if (!dryRun) for (const o of others) toArchive.push(o.id)
       merged += others.length
     }
+
+    // apply archival AFTER all clusters resolve, so an earlier merge does not hide a
+    // sub-skill a later cluster's keeper composition depends on.
+    if (!dryRun) for (const id of toArchive) store.updateStatus(id, 'archived')
 
     for (const s of store.listByTier('cold')) {
       if (s.status !== 'verified' || s.pinned) continue

@@ -1,4 +1,4 @@
-import type { Skill, SkillCost, Provenance, SkillKind } from './skill.ts'
+import type { Skill, SkillCost, Provenance } from './skill.ts'
 import { EMBEDDER_VERSION } from './skill.ts'
 import { computeCheckStrength } from './strength.ts'
 
@@ -14,7 +14,6 @@ export interface CaptureInput {
   cost?: SkillCost
   evidence?: string
   createdAt?: number
-  kind?: SkillKind
 }
 
 // Pure, deterministic: turn a solved task into a QUARANTINED skill candidate.
@@ -50,7 +49,7 @@ export function captureSkill(input: CaptureInput): Skill {
     utilityScore: 0,
     status: 'quarantined',
     version: 1,
-    kind: input.kind ?? 'positive',
+    kind: 'positive',
     tier: 'hot',
     uses: 0,
     successRate: 1,

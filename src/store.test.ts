@@ -94,6 +94,16 @@ describe('SkillStore', () => {
     assert.equal(store.distinctRetrievalTasks('s1'), 2)
   })
 
+  test('delete cascades to retrievals and deps', () => {
+    const id = store.insert(mk())
+    store.recordRetrieval(id, 'taskA', 1)
+    store.addDep('other', id)
+    store.delete(id)
+    assert.equal(store.get(id), undefined)
+    assert.equal(store.distinctRetrievalTasks(id), 0)
+    assert.deepEqual(store.dependentsOf(id), [])
+  })
+
   test('skills persist across reopen (named file)', () => {
     const base = join(tmpdir(), 'praxis-persist-test.db')
     const clean = () => {

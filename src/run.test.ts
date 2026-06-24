@@ -86,7 +86,8 @@ describe('runSkill + composition', () => {
   })
 
   test('runSkill rejects a negative (kind) record', async () => {
-    const s = captureSkill({ name: 'neg', interface: '', implementation: 'return 0', acceptanceTest: 'assert(run(1) === 1)', task: 't', kind: 'negative' })
+    const s = captureSkill({ name: 'neg', interface: '', implementation: 'return 0', acceptanceTest: 'assert(run(1) === 1)', task: 't' })
+    s.kind = 'negative'
     s.status = 'verified'
     const id = store.insert(s)
     await assert.rejects(runSkill(store, id, 1), /negative record/)

@@ -96,4 +96,23 @@ describe('consolidate + reindex', () => {
     assert.equal(n, 2)
     assert.ok(store.all().every((s) => s.embedderVersion === 'hashing-v1'))
   })
+
+  test('merges a cluster of COMPOSED keepers (resolves sub-skills before verify)', async () => {
+    await addVerified(store, { name: 'leaf', impl: 'return input + "!"', test: 'assert(run("a") === "a!")' })
+    for (let i = 0; i < 3; i++) {
+      await addVerified(store, { name: 'composed', impl: 'return call("leaf", input)', test: 'assert(run("a") === "a!")' })
+    }
+    const r = await consolidate(store, embedder)
+    assert.ok(r.merged >= 2)
+  })
+
+  test('flags a cluster whose keeper references a missing sub-skill (no unsafe merge)', async () => {
+    for (let i = 0; i < 3; i++) {
+      await addVerified(store, { name: 'broken', impl: 'return call("missing", input)', test: 'assert(run("a") === "a")' })
+    }
+    const before = verifiedCount()
+    const r = await consolidate(store, embedder)
+    assert.ok(r.flagged >= 1)
+    assert.equal(verifiedCount(), before)
+  })
 })
