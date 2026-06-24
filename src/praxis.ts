@@ -40,6 +40,7 @@ export class Praxis {
   sem: Semaphore
   maxDepth: number
   hotCap: number
+  writeChain: Promise<unknown>
 
   constructor(store?: SkillStore, embedder?: Embedder, opts: PraxisOptions = {}) {
     this.store = store ?? new SkillStore(':memory:')
@@ -48,6 +49,17 @@ export class Praxis {
     this.sem = new Semaphore(opts.maxConcurrentVerify ?? 4)
     this.maxDepth = opts.maxDepth ?? 5
     this.hotCap = opts.hotCap ?? 200
+    this.writeChain = Promise.resolve()
+  }
+
+  // serialize a critical section (the dedup read-check-insert) across concurrent calls.
+  private withLock(fn: () => Promise<unknown>): Promise<unknown> {
+    const run = this.writeChain.then(() => fn())
+    this.writeChain = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
   }
 
   private text(s: Skill): string {
@@ -83,11 +95,18 @@ export class Praxis {
     candidate.status = v.status
 
     if (v.status === 'verified') {
-      const d = await maybeMerge(this.store, candidate, this.embedder)
-      // register deps whether freshly inserted OR reinforced (addDep is INSERT OR IGNORE).
-      if (d.action === 'inserted' || d.action === 'reinforced') for (const dep of deps) this.store.addDep(d.id, dep)
-      retier(this.store, this.hotCap)
-      return { id: d.id, status: 'verified', reason: d.action === 'inserted' ? undefined : d.action }
+      // serialize the dedup read-check-insert: the embed() inside maybeMerge yields the event
+      // loop, so two concurrent remember() calls of identical content could otherwise both
+      // insert. The lock makes the second one see + reinforce the first.
+      return (await this.withLock(async () => {
+        const d = await maybeMerge(this.store, candidate, this.embedder)
+        // deps were parsed from the CANDIDATE's impl; register them only when the candidate is
+        // what we stored (inserted). On reinforced/duplicate, d.id is a DIFFERENT existing skill
+        // that keeps its own deps - writing the candidate's deps onto it would be wrong.
+        if (d.action === 'inserted') for (const dep of deps) this.store.addDep(d.id, dep)
+        retier(this.store, this.hotCap)
+        return { id: d.id, status: 'verified', reason: d.action === 'inserted' ? undefined : d.action }
+      })) as RememberResult
     }
 
     candidate.embedding = await this.embedder.embed(this.text(candidate))

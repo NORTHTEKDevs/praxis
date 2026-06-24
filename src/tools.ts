@@ -67,8 +67,14 @@ export function buildTools(px: Praxis): ToolDef[] {
       description: 'Execute a verified skill (composing verified sub-skills if its code calls them) on an input.',
       inputSchema: { type: 'object', required: ['id', 'input'], properties: { id: str('skill id'), input: { description: 'the input value' } } },
       handler: (a) => {
-        if (typeof a.input === 'string' && a.input.length > 100_000) throw new Error('run_skill: input too large')
-        return px.run(String(a.id), a.input)
+        let sz = 0
+        try {
+          sz = typeof a.input === 'string' ? a.input.length : (JSON.stringify(a.input ?? null) || '').length
+        } catch {
+          sz = 0
+        }
+        if (sz > 100_000) throw new Error('run_skill: input too large')
+        return px.run(String(a.id).slice(0, 200), a.input)
       },
     },
     {

@@ -122,6 +122,15 @@ describe('Praxis integration', () => {
     const r = await px.remember(valid('out', 'return input', 'assert(run(1) === 1)'))
     await assert.rejects(px.reinforce(r.id, 'bogus' as never), /outcome must be/)
   })
+
+  test('concurrent remember of identical skills does not duplicate (write-lock)', async () => {
+    await Promise.all([
+      px.remember(valid('dup', 'return input * 2', 'assert(run(3) === 6)')),
+      px.remember(valid('dup', 'return input * 2', 'assert(run(3) === 6)')),
+    ])
+    const dups = px.store.listByStatus('verified').filter((s) => s.kind === 'positive' && s.name === 'dup')
+    assert.equal(dups.length, 1)
+  })
 })
 
 describe('RateLimiter', () => {

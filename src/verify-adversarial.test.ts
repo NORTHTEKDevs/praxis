@@ -49,6 +49,11 @@ describe('verify gate adversarial suite', () => {
     assert.notEqual(r.status, 'verified')
   })
 
+  test('skill cannot inject an unverified sub-skill by mutating __subs', async () => {
+    const r = await verifySkill(mk('const n = "ghost"; __subs[n] = "return 999"; return call(n, input)', 'assert(run(1) === 999)'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('100 rapid verifications all complete (no worker leak)', async () => {
     const results: string[] = []
     for (let i = 0; i < 100; i++) {

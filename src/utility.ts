@@ -32,21 +32,30 @@ export async function reinforce(
   id: string,
   outcome: 'success' | 'failure',
 ): Promise<Skill | undefined> {
-  const skill = store.get(id)
+  let skill = store.get(id)
   if (!skill) return undefined
-  const newUses = skill.uses + 1
-  skill.successRate = (skill.successRate * skill.uses + (outcome === 'success' ? 1 : 0)) / newUses
-  skill.uses = newUses
 
+  // Run the async anti-regression check FIRST, then RE-READ the row. verifySkill yields the
+  // event loop; a concurrent quarantine during that window must not be overwritten by a stale
+  // snapshot (TOCTOU).
   if (outcome === 'failure' && skill.acceptanceTest.trim()) {
     const v = await verifySkill({ implementation: skill.implementation, acceptanceTest: skill.acceptanceTest })
+    skill = store.get(id)
+    if (!skill) return undefined
     if (v.status !== 'verified') {
-      skill.status = 'quarantined'
-      store.update(skill)
+      if (skill.status === 'verified') {
+        skill.status = 'quarantined'
+        store.update(skill)
+      }
       return store.get(id)
     }
   }
 
+  // never resurrect a skill that was concurrently demoted out of 'verified'.
+  if (skill.status !== 'verified') return skill
+  const newUses = skill.uses + 1
+  skill.successRate = (skill.successRate * skill.uses + (outcome === 'success' ? 1 : 0)) / newUses
+  skill.uses = newUses
   skill.utilityScore = utilityScore(skill, store.distinctRetrievalTasks(id))
   store.update(skill)
   return store.get(id)

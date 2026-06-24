@@ -31,10 +31,17 @@ const sandbox = {
 
 const code = `
 __outcome = (() => {
+  // Capture the control structures into closure consts and DELETE them from the vm global so
+  // skill code (which runs in the global scope via new Function) cannot mutate __subs to inject
+  // an unverified sub-skill body, nor lift __maxDepth.
+  const __subs = globalThis.__subs;
+  const __maxDepth = globalThis.__maxDepth;
+  delete globalThis.__subs;
+  delete globalThis.__maxDepth;
   let ac = 0;
   const af = [];
   const assert = (cond, msg) => { ac++; if (!cond) { af.push(String(msg || "ACCEPTANCE_FAILED")); const e = new Error("ACCEPTANCE_FAILED"); e.name = "AcceptanceError"; throw e; } };
-  const __subFns = {};
+  const __subFns = Object.create(null);
   let __depth = 0;
   const call = (name, inp) => {
     if (!Object.prototype.hasOwnProperty.call(__subs, name)) throw new Error("unknown sub-skill: " + name);
