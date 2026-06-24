@@ -38,6 +38,7 @@ export async function maybeMerge(
   const bestOf = (skills: Skill[]): { skill: Skill; sim: number } | null => {
     let best: { skill: Skill; sim: number } | null = null
     for (const s of skills) {
+      if (s.kind !== 'positive') continue // never dedup against a negative record
       if (s.embedding.length === 0) continue
       if (s.embedderVersion !== candidate.embedderVersion) continue
       if (!interfaceCompatible(s, candidate)) continue

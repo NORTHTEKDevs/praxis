@@ -73,4 +73,16 @@ describe('maybeMerge (dedup on write)', () => {
     assert.equal(r.action, 'inserted')
     assert.equal(store.all().length, 2)
   })
+
+  test('dedup ignores a verified NEGATIVE near-match (no reinforce of a non-runnable record)', async () => {
+    const neg = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    neg.kind = 'negative'
+    neg.status = 'verified'
+    neg.embedding = await embedder.embed('reverse-string (s:string)->string reverse a string')
+    store.insert(neg)
+    const c = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    c.status = 'verified'
+    const r = await maybeMerge(store, c, embedder)
+    assert.equal(r.action, 'inserted')
+  })
 })

@@ -104,6 +104,13 @@ describe('SkillStore', () => {
     assert.deepEqual(store.dependentsOf(id), [])
   })
 
+  test('findVerifiedByName returns only verified positive skills', () => {
+    store.insert(mk({ name: 'foo', kind: 'negative', status: 'verified' }))
+    assert.equal(store.findVerifiedByName('foo'), undefined)
+    const id = store.insert(mk({ name: 'foo', status: 'verified' }))
+    assert.equal(store.findVerifiedByName('foo')?.id, id)
+  })
+
   test('skills persist across reopen (named file)', () => {
     const base = join(tmpdir(), 'praxis-persist-test.db')
     const clean = () => {
