@@ -29,12 +29,18 @@ export async function verifySkill(
   if (computeCheckStrength(skill.acceptanceTest) < 1) {
     return { status: 'quarantined', reason: 'acceptance test too weak (no concrete expected value)' }
   }
-  const r = await runAcceptance(skill.implementation, skill.acceptanceTest, {
-    timeoutMs: opts.timeoutMs ?? 2000,
-    subImpls: opts.subImpls,
-    maxDepth: opts.maxDepth,
-  })
-  if (r.ok) return { status: 'verified' }
+  const sopts = { timeoutMs: opts.timeoutMs ?? 2000, subImpls: opts.subImpls, maxDepth: opts.maxDepth }
+  const r = await runAcceptance(skill.implementation, skill.acceptanceTest, sopts)
+  if (r.ok) {
+    // Counter-example probe: re-run the acceptance test against a STUB implementation that
+    // ignores the input. If it ALSO passes, the test does not actually exercise the
+    // implementation (a vacuous/tautological oracle, e.g. `assert(run(x) === 6 || true)`),
+    // so it must NOT verify. This catches the short-circuit-bypass class that a purely
+    // syntactic strength check cannot.
+    const probe = await runAcceptance('return ({ __praxisStub: true })', skill.acceptanceTest, sopts)
+    if (probe.ok) return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous)' }
+    return { status: 'verified' }
+  }
   if (r.category === 'assertion') return { status: 'refuted', reason: r.error }
   return { status: 'quarantined', reason: r.error }
 }

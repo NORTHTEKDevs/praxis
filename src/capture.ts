@@ -41,7 +41,7 @@ export function captureSkill(input: CaptureInput): Skill {
     interface: (input.interface ?? '').slice(0, TEXT),
     implementation: input.implementation.slice(0, CODE),
     acceptanceTest: (input.acceptanceTest ?? '').slice(0, CODE),
-    capabilities: input.capabilities ?? [],
+    capabilities: (input.capabilities ?? []).slice(0, 64).map((c) => String(c).slice(0, 200)),
     cost: input.cost ?? 'normal',
     provenance,
     embedding: [],

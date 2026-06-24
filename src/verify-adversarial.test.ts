@@ -38,6 +38,17 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'refuted') // closure preserves the recorded failure; tamper is inert
   })
 
+  test('a short-circuit-tautology acceptance test does not verify (counter-example probe)', async () => {
+    // run(3) === 6 is false, but `|| true` makes the assert pass regardless of the impl.
+    const r = await verifySkill(mk('return 0', 'assert(run(3) === 6 || true)'))
+    assert.notEqual(r.status, 'verified')
+  })
+
+  test('an acceptance test that ignores run() entirely does not verify', async () => {
+    const r = await verifySkill(mk('return 0', 'assert(run(3) === run(3) + 0 || 1 === 1)'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('100 rapid verifications all complete (no worker leak)', async () => {
     const results: string[] = []
     for (let i = 0; i < 100; i++) {

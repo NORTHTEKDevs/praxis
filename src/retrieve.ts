@@ -36,7 +36,8 @@ export async function recall(
 ): Promise<RecallResult> {
   const k = opts.k ?? 5
   const start = Date.now()
-  const qemb = await embedder.embed(query)
+  const q = (query ?? '').slice(0, 2000) // bound the O(n) embed + stored task
+  const qemb = await embedder.embed(q)
   const verified = store.listByStatus('verified')
 
   const scored = verified
@@ -62,7 +63,7 @@ export async function recall(
 
   // Record retrievals so the `generality` dimension of the utility score reflects how many
   // distinct tasks a skill has served (otherwise it is permanently 0).
-  for (const s of selected) store.recordRetrieval(s.id, query, Date.now())
+  for (const s of selected) store.recordRetrieval(s.id, q, Date.now())
 
   const negThreshold = opts.negativeThreshold ?? 0.7
   const negatives = verified

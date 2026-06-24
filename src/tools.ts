@@ -52,11 +52,13 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'recall_skills',
       description: 'Retrieve the top-k verified skills for a query, plus known failure modes (negatives) to check before retrying.',
-      inputSchema: { type: 'object', required: ['query'], properties: { query: str('task description'), k: { type: 'number', minimum: 1, maximum: 50 }, tokenBudget: { type: 'number' }, maxNegatives: { type: 'number', maximum: 20, description: 'max known-failure modes to return (default 1)' } } },
+      inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string', description: 'task description', maxLength: 2000 }, k: { type: 'number', minimum: 1, maximum: 50 }, tokenBudget: { type: 'number', minimum: 0 }, maxNegatives: { type: 'number', minimum: 0, maximum: 20, description: 'max known-failure modes to return (default 1)' } } },
       handler: async (a) => {
-        const k = Math.max(1, Math.min((a.k as number) ?? 5, 50))
-        const maxNegatives = Math.min((a.maxNegatives as number) ?? 1, 20)
-        const r = await px.recall(String(a.query), { k, tokenBudget: a.tokenBudget as number, maxNegatives })
+        const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
+        const k = Math.max(1, Math.min(num(a.k, 5), 50))
+        const maxNegatives = Math.max(0, Math.min(num(a.maxNegatives, 1), 20))
+        const tokenBudget = typeof a.tokenBudget === 'number' && Number.isFinite(a.tokenBudget) ? a.tokenBudget : undefined
+        const r = await px.recall(String(a.query), { k, tokenBudget, maxNegatives })
         return { skills: r.selected, negatives: r.negatives, costEstimate: r.costEstimate }
       },
     },
@@ -64,7 +66,10 @@ export function buildTools(px: Praxis): ToolDef[] {
       name: 'run_skill',
       description: 'Execute a verified skill (composing verified sub-skills if its code calls them) on an input.',
       inputSchema: { type: 'object', required: ['id', 'input'], properties: { id: str('skill id'), input: { description: 'the input value' } } },
-      handler: (a) => px.run(String(a.id), a.input),
+      handler: (a) => {
+        if (typeof a.input === 'string' && a.input.length > 100_000) throw new Error('run_skill: input too large')
+        return px.run(String(a.id), a.input)
+      },
     },
     {
       name: 'record_failure',

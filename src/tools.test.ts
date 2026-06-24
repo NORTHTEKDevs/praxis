@@ -64,4 +64,18 @@ describe('MCP tools', () => {
     await byName(px, 'pin_skill').handler({ id: rem.id })
     assert.equal(px.store.get(rem.id)?.pinned, true)
   })
+
+  test('consolidate_now handler runs and returns counts', async () => {
+    const px = new Praxis()
+    const r = (await byName(px, 'consolidate_now').handler({ dryRun: true })) as Record<string, unknown>
+    assert.ok('merged' in r)
+    assert.ok('evicted' in r)
+  })
+
+  test('recall_skills clamps a non-finite k instead of returning empty', async () => {
+    const px = new Praxis()
+    await byName(px, 'remember_skill').handler({ name: 'd', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double a number' })
+    const r = (await byName(px, 'recall_skills').handler({ query: 'double a number', k: Number.NaN })) as { skills: unknown[] }
+    assert.ok(r.skills.length >= 1)
+  })
 })

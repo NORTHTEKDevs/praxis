@@ -109,9 +109,11 @@ export class Praxis {
   }
 
   async reinforce(id: string, outcome: 'success' | 'failure'): Promise<Skill | undefined> {
+    if (outcome !== 'success' && outcome !== 'failure') throw new Error('reinforce: outcome must be "success" or "failure"')
     const existing = this.store.get(id)
     if (!existing) throw new Error(`reinforce: no skill with id ${id}`)
     if (existing.kind === 'negative') throw new Error('reinforce: cannot reinforce a negative record')
+    if (existing.status !== 'verified') throw new Error(`reinforce: skill is not verified (status: ${existing.status})`)
     const r = await reinforce(this.store, id, outcome)
     if (r && r.status !== 'verified') quarantineCascade(this.store, id)
     retier(this.store, this.hotCap)

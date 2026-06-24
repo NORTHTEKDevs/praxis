@@ -111,6 +111,17 @@ describe('Praxis integration', () => {
     const id = await px.recordFailure({ task: 'parse json', approach: 'regex', reason: 'fails' })
     await assert.rejects(px.reinforce(id, 'success'), /negative record/)
   })
+
+  test('reinforce rejects a non-verified (archived) skill', async () => {
+    const r = await px.remember(valid('arch', 'return input', 'assert(run(1) === 1)'))
+    px.store.updateStatus(r.id, 'archived')
+    await assert.rejects(px.reinforce(r.id, 'success'), /not verified/)
+  })
+
+  test('reinforce rejects an invalid outcome', async () => {
+    const r = await px.remember(valid('out', 'return input', 'assert(run(1) === 1)'))
+    await assert.rejects(px.reinforce(r.id, 'bogus' as never), /outcome must be/)
+  })
 })
 
 describe('RateLimiter', () => {
