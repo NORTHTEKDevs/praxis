@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "praxis": {
+      "command": "praxis",
+      "args": ["serve"]
+    }
+  }
+}

@@ -1,7 +1,38 @@
 {
-  "name": "praxis",
-  "version": "0.0.0",
+  "name": "@northtek/praxis",
+  "version": "0.1.0",
   "type": "module",
-  "private": true,
-  "description": "Verified, composable, self-pruning skill library for AI agents"
+  "description": "Verified skill accumulation for AI agents - your agent proves it can do something, then remembers that it can. MCP server.",
+  "license": "MIT",
+  "bin": {
+    "praxis": "praxis.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "files": [
+    "src",
+    "bench",
+    "praxis.mjs",
+    ".claude/mcp-example.json",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --experimental-strip-types --experimental-sqlite --test src/*.test.ts",
+    "bench": "node --experimental-strip-types --experimental-sqlite bench/praxis-bench.ts",
+    "praxis": "node --experimental-strip-types --experimental-sqlite src/cli.ts"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "mcp",
+    "skills",
+    "memory",
+    "llm",
+    "claude",
+    "verification"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
 }
