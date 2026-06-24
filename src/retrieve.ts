@@ -7,6 +7,7 @@ export interface RecallOptions {
   k?: number
   tokenBudget?: number
   negativeThreshold?: number
+  maxNegatives?: number
 }
 
 export interface RecallResult {
@@ -65,13 +66,17 @@ export async function recall(
     cost += t
   }
 
+  // Record retrievals so the `generality` dimension of the utility score reflects how many
+  // distinct tasks a skill has served (otherwise it is permanently 0).
+  for (const s of selected) store.recordRetrieval(s.id, query, Date.now())
+
   const negThreshold = opts.negativeThreshold ?? 0.7
   const negatives = verified
     .filter((s) => s.kind === 'negative' && s.embedding.length > 0)
     .map((s) => ({ s, sim: cosine(qemb, s.embedding) }))
     .filter((x) => x.sim > negThreshold)
     .sort((a, b) => b.sim - a.sim)
-    .slice(0, 1)
+    .slice(0, opts.maxNegatives ?? 1)
     .map((x) => x.s)
 
   for (const n of negatives) cost += estTokens(n)

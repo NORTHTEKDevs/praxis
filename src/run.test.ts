@@ -78,4 +78,17 @@ describe('runSkill + composition', () => {
     assert.deepEqual(affected, [a])
     assert.equal(store.get(a)?.status, 'quarantined')
   })
+
+  test('runSkill rejects a non-verified (quarantined) skill', async () => {
+    const id = addVerified({ name: 'q', impl: 'return input * 2' })
+    store.updateStatus(id, 'quarantined')
+    await assert.rejects(runSkill(store, id, 3), /not verified/)
+  })
+
+  test('runSkill rejects a negative (kind) record', async () => {
+    const s = captureSkill({ name: 'neg', interface: '', implementation: 'return 0', acceptanceTest: 'assert(run(1) === 1)', task: 't', kind: 'negative' })
+    s.status = 'verified'
+    const id = store.insert(s)
+    await assert.rejects(runSkill(store, id, 1), /negative record/)
+  })
 })

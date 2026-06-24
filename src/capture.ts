@@ -29,7 +29,7 @@ export function captureSkill(input: CaptureInput): Skill {
     task: input.task ?? '',
     model: input.model ?? 'unknown',
     parents: input.parents ?? [],
-    createdAt: input.createdAt ?? 0,
+    createdAt: input.createdAt ?? Date.now(),
     evidence: input.evidence ?? '',
   }
 

@@ -49,6 +49,7 @@ export class SkillStore {
         task TEXT NOT NULL,
         retrieved_at INTEGER NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS idx_retrievals_skill ON skill_retrievals(skill_id);
     `)
     const row = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as
       | { version: number }

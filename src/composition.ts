@@ -1,6 +1,7 @@
 import { SkillStore } from './store.ts'
 
-const CALL_RE = /call\s*\(\s*['"]([^'"]+)['"]/g
+// Matches call('name'), call("name"), or call(`name`) at the current scan position.
+const CALL_AT = /^call\s*\(\s*(['"`])([^'"`]+)\1/
 
 export class CompositionError extends Error {}
 
@@ -11,12 +12,38 @@ export interface CompositionResolution {
   reason?: string
 }
 
-// Extract the sub-skill names a piece of code references via call('name', ...).
+// Extract the sub-skill names a piece of code references via call('name', ...). A small
+// scanner that tracks string/comment state so call( inside a comment or a string literal
+// is NOT mistaken for a real dependency, and all three quote styles for the name are
+// recognized. (Full JS parsing is overkill for v1; this covers the real false-positive /
+// bypass cases the audit found.)
 export function parseCalls(impl: string): string[] {
   const names = new Set<string>()
-  let m: RegExpExecArray | null
-  CALL_RE.lastIndex = 0
-  while ((m = CALL_RE.exec(impl)) !== null) names.add(m[1])
+  const n = impl.length
+  let i = 0
+  // 'code' | 'line' | 'block' | a quote char (the open string delimiter)
+  let state = 'code'
+  while (i < n) {
+    const c = impl[i]
+    const c2 = impl[i + 1]
+    if (state === 'code') {
+      if (c === '/' && c2 === '/') { state = 'line'; i += 2; continue }
+      if (c === '/' && c2 === '*') { state = 'block'; i += 2; continue }
+      if (c === "'" || c === '"' || c === '`') { state = c; i++; continue }
+      if (c === 'c' && (i === 0 || !/[\w$]/.test(impl[i - 1]))) {
+        const m = CALL_AT.exec(impl.slice(i))
+        if (m) { names.add(m[2]); i += m[0].length; continue }
+      }
+      i++
+      continue
+    }
+    if (state === 'line') { if (c === '\n') state = 'code'; i++; continue }
+    if (state === 'block') { if (c === '*' && c2 === '/') { state = 'code'; i += 2 } else i++; continue }
+    // inside a string/template literal: skip contents, honoring escapes
+    if (c === '\\') { i += 2; continue }
+    if (c === state) state = 'code'
+    i++
+  }
   return [...names]
 }
 

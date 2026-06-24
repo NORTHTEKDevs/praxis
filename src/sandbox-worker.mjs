@@ -63,7 +63,9 @@ try {
 } catch (e) {
   const msg = String((e && e.message) || e)
   let category = 'runtime'
-  if (/timed out/i.test(msg)) category = 'timeout'
+  // ERR_SCRIPT_EXECUTION_TIMEOUT is the stable Node error code; the message wording is
+  // version-dependent, so check the code first, then fall back to the message.
+  if ((e && e.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') || /timed out/i.test(msg)) category = 'timeout'
   else if (/ASYNC_SKILL/.test(msg) || (e && e.name === 'AsyncError')) category = 'async'
   else if (sandbox.__af.length > 0 || /ACCEPTANCE_FAILED/.test(msg)) category = 'assertion'
   parentPort.postMessage({ ok: false, category, error: msg })

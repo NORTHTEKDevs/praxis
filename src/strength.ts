@@ -8,17 +8,21 @@ export function computeCheckStrength(acceptanceTest: string): number {
   let strength = 0
   const calls = acceptanceTest.split(/assert\s*\(/).slice(1)
   for (const seg of calls) {
-    // take the assertion expression up to the closing paren / statement end
-    const expr = seg.split(/\)\s*;?\s*$/m)[0].split('\n')[0]
+    // flatten newlines so a multi-line assert body still parses, then take the
+    // assertion expression up to the closing paren / statement end
+    const flat = seg.replace(/\n\s*/g, ' ')
+    const expr = flat.split(/\)\s*;?\s*$/)[0]
     const parts = expr.split(/===|!==|==|!=/)
     if (parts.length < 2) continue
     const lhs = parts[0]
     const rhs = parts.slice(1).join('==')
     const isRun = (s: string) => /^\s*run\s*\(/.test(s.trim())
     const hasLiteral = (s: string) => /(["'`])|(?:^|[^\w.])-?\d|\btrue\b|\bfalse\b|\bnull\b|\[|\{/.test(s)
-    if (isRun(lhs) && isRun(rhs)) continue // self-referential -> no concrete oracle
+    // a real oracle compares run(...) against a CONCRETE literal. literal-vs-literal
+    // (assert("a" === "a")) and run-vs-run (self-referential) score 0: the implementation
+    // is never exercised, so they must NOT pass the verify gate.
+    if (isRun(lhs) && isRun(rhs)) continue
     if ((isRun(lhs) && hasLiteral(rhs)) || (isRun(rhs) && hasLiteral(lhs))) strength++
-    else if (hasLiteral(lhs) || hasLiteral(rhs)) strength++
   }
   return strength
 }

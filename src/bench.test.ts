@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs'
 import { runBench } from './bench.ts'
 
 describe('praxis benchmark (synthetic)', () => {
-  test('capability accumulation + bounded cost + negatives delta', async () => {
+  test('capability accumulation + bounded cost + negatives delta + under 60s', async () => {
+    const start = Date.now()
     const off = await runBench('off')
     const on = await runBench('on')
 
@@ -16,6 +17,7 @@ describe('praxis benchmark (synthetic)', () => {
     assert.ok(off.maxTokensPerTask <= 800, `maxTokens=${off.maxTokensPerTask}`)
     // negatives ON warns before a repeat; OFF does not
     assert.ok(on.repeatFailures < off.repeatFailures, `on=${on.repeatFailures} off=${off.repeatFailures}`)
+    assert.ok(Date.now() - start < 60_000, 'bench exceeded the 60s CI budget')
   })
 
   test('benchmark README labels itself SYNTHETIC near the top', () => {

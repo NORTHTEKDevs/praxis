@@ -2,8 +2,11 @@ import { SkillStore } from './store.ts'
 import type { Embedder } from './embedder.ts'
 import { cosine } from './embedder.ts'
 import { verifySkill } from './verify.ts'
+import type { VerifyResult } from './verify.ts'
 import { EMBEDDER_VERSION } from './skill.ts'
 import type { Skill } from './skill.ts'
+import { Semaphore } from './concurrency.ts'
+import { retier, DEFAULT_HOT_CAP } from './utility.ts'
 
 export interface ConsolidateResult {
   merged: number
@@ -18,10 +21,12 @@ export interface ConsolidateOpts {
   cosineThreshold?: number
   evictThreshold?: number
   lengthRatioMax?: number
+  concurrency?: number
 }
 
-// In-process mutex: two consolidation passes must not interleave writes.
-const _lock = { busy: false }
+// Per-store in-process mutex: two passes on the SAME store must not interleave writes;
+// independent stores may consolidate concurrently.
+const _locks = new WeakMap<SkillStore, { busy: boolean }>()
 
 function interfaceCompatible(a: Skill, b: Skill): boolean {
   return a.interface.trim() === b.interface.trim()
@@ -42,8 +47,13 @@ export async function consolidate(
   embedder: Embedder,
   opts: ConsolidateOpts = {},
 ): Promise<ConsolidateResult> {
-  if (_lock.busy) throw new Error('consolidation already in progress')
-  _lock.busy = true
+  let lock = _locks.get(store)
+  if (!lock) {
+    lock = { busy: false }
+    _locks.set(store, lock)
+  }
+  if (lock.busy) throw new Error('consolidation already in progress')
+  lock.busy = true
   const start = Date.now()
   try {
     const minInstances = opts.minInstances ?? 3
@@ -51,6 +61,7 @@ export async function consolidate(
     const evictT = opts.evictThreshold ?? 0.1
     const lenMax = opts.lengthRatioMax ?? 3
     const dryRun = opts.dryRun ?? false
+    const sem = new Semaphore(opts.concurrency ?? 4)
     let merged = 0
     let flagged = 0
     let evicted = 0
@@ -80,7 +91,9 @@ export async function consolidate(
       let safe = true
       for (const o of others) {
         if (!o.acceptanceTest.trim()) continue
-        const v = await verifySkill({ implementation: keeper.implementation, acceptanceTest: o.acceptanceTest })
+        const v = (await sem.run(() =>
+          verifySkill({ implementation: keeper.implementation, acceptanceTest: o.acceptanceTest }),
+        )) as VerifyResult
         if (v.status !== 'verified') {
           safe = false
           break
@@ -102,9 +115,11 @@ export async function consolidate(
       }
     }
 
+    // refresh tiers on the surviving verified set so recall sees current utility.
+    if (!dryRun) retier(store, DEFAULT_HOT_CAP)
     return { merged, flagged, evicted, durationMs: Date.now() - start }
   } finally {
-    _lock.busy = false
+    lock.busy = false
   }
 }
 

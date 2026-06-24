@@ -23,16 +23,21 @@ export async function recordFailure(
   embedder: Embedder,
   input: FailureInput,
 ): Promise<string> {
-  const emb = await embedder.embed(`${input.task} ${input.approach}`)
+  // bound the body fields so a misbehaving caller cannot write megabytes into SQLite.
+  const MAX = 2000
+  const task = (input.task ?? '').slice(0, MAX)
+  const approach = (input.approach ?? '').slice(0, MAX)
+  const reason = (input.reason ?? '').slice(0, MAX)
+  const emb = await embedder.embed(`${task} ${approach}`)
   const skill: Skill = {
     id: '',
-    name: `failure: ${input.approach}`.slice(0, 80),
+    name: `failure: ${approach}`.slice(0, 80),
     interface: '',
     implementation: '',
     acceptanceTest: '',
     capabilities: [],
     cost: 'cheap',
-    provenance: { task: input.task, model: 'observed', parents: [], createdAt: 0, evidence: input.reason },
+    provenance: { task, model: 'observed', parents: [], createdAt: Date.now(), evidence: reason },
     embedding: emb,
     embedderVersion: EMBEDDER_VERSION,
     utilityScore: 0,

@@ -45,4 +45,21 @@ describe('maybeMerge (dedup on write)', () => {
     await maybeMerge(store, cand('sum-array', '(xs:number[])->number', 'sum an array of numbers'), embedder)
     assert.equal(store.all().length, 2)
   })
+
+  test('a verified near-match is preferred over a quarantined one', async () => {
+    const text = 'reverse-string (s:string)->string reverse a string'
+    const q = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    q.embedding = await embedder.embed(text)
+    store.insert(q) // quarantined (capture default)
+    const v = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    v.embedding = await embedder.embed(text)
+    v.status = 'verified'
+    const vId = store.insert(v)
+    // submit a freshly-verified candidate with the same text
+    const c = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    c.status = 'verified'
+    const r = await maybeMerge(store, c, embedder)
+    assert.equal(r.action, 'reinforced')
+    assert.equal(r.id, vId) // reinforced the VERIFIED one, not dropped against the quarantined
+  })
 })

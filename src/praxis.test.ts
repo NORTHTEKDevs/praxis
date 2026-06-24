@@ -1,6 +1,7 @@
 import { test, describe, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { Praxis, RateLimiter, Semaphore, RateLimitError } from './praxis.ts'
+import { captureSkill } from './capture.ts'
 
 const valid = (name: string, impl: string, acceptanceTest: string) => ({
   name,
@@ -64,6 +65,35 @@ describe('Praxis integration', () => {
     await p.remember(valid('a', 'return 1', 'assert(run(1) === 1)'))
     await p.remember(valid('b', 'return 2', 'assert(run(1) === 2)'))
     await assert.rejects(p.remember(valid('c', 'return 3', 'assert(run(1) === 3)')), RateLimitError)
+  })
+
+  test('a remembered skill gets a real createdAt (recency is live, not 0)', async () => {
+    const r = await px.remember(valid('ts', 'return input', 'assert(run(1) === 1)'))
+    assert.ok(px.store.get(r.id)!.provenance.createdAt > 0)
+  })
+
+  test('reinforce failure cascades quarantine through dependents (end-to-end)', async () => {
+    const sub = captureSkill({ name: 'sub', interface: '(x)->y', implementation: 'return 1', acceptanceTest: 'assert(run(1) === 2)', task: 'sub' })
+    sub.status = 'verified'
+    const subId = px.store.insert(sub)
+    const comp = captureSkill({ name: 'comp', interface: '(x)->y', implementation: 'return call("sub", input)', acceptanceTest: 'assert(run(1) === 1)', task: 'comp' })
+    comp.status = 'verified'
+    const compId = px.store.insert(comp)
+    px.store.addDep(compId, subId)
+    await px.reinforce(subId, 'failure') // anti-regression re-runs sub's failing test -> quarantine -> cascade
+    assert.equal(px.store.get(subId)?.status, 'quarantined')
+    assert.equal(px.store.get(compId)?.status, 'quarantined')
+  })
+
+  test('reinforce on a nonexistent id throws (no silent success)', async () => {
+    await assert.rejects(px.reinforce('does-not-exist', 'success'), /no skill/)
+  })
+
+  test('pin rejects a non-verified skill', async () => {
+    const s = captureSkill({ name: 'q', interface: '', implementation: 'return 1', acceptanceTest: 'assert(run(1) === 1)', task: 'q' })
+    s.status = 'quarantined'
+    const id = px.store.insert(s)
+    assert.throws(() => px.pin(id), /only verified/)
   })
 })
 

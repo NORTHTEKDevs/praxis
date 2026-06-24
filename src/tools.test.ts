@@ -43,4 +43,11 @@ describe('MCP tools', () => {
   test('all 8 tools are exposed', () => {
     assert.equal(buildTools(new Praxis()).length, 8)
   })
+
+  test('reinforce on a nonexistent id surfaces an MCP error envelope, not a silent success', async () => {
+    const px = new Praxis()
+    const r = await wrapTool(() => byName(px, 'reinforce').handler({ id: 'nope', outcome: 'success' }))
+    assert.equal(r.isError, true)
+    assert.match(r.content[0].text, /no skill/)
+  })
 })

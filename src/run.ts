@@ -18,6 +18,10 @@ export async function runSkill(
 ): Promise<RunResult> {
   const skill = store.get(id)
   if (!skill) throw new Error(`runSkill: no skill with id ${id}`)
+  // Execution-path enforcement of verify-before-keep: only a VERIFIED POSITIVE skill may
+  // run. Quarantined/refuted/archived skills are unproven; negative skills have no body.
+  if (skill.status !== 'verified') throw new Error(`runSkill: skill is not verified (status: ${skill.status})`)
+  if (skill.kind !== 'positive') throw new Error('runSkill: a negative record cannot be executed')
   const maxDepth = opts.maxDepth ?? 5
 
   let subImpls: Record<string, string> = {}

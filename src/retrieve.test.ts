@@ -4,6 +4,7 @@ import { SkillStore } from './store.ts'
 import { HashingEmbedder } from './embedder.ts'
 import { recall } from './retrieve.ts'
 import { captureSkill } from './capture.ts'
+import { recordFailure } from './negative.ts'
 import type { SkillKind, SkillStatus } from './skill.ts'
 
 const embedder = new HashingEmbedder()
@@ -76,5 +77,30 @@ describe('recall (budgeted top-k)', () => {
     await add(store, { name: 'p', task: 'sort numbers' })
     const r = await recall(store, embedder, 'sort numbers', { k: 5 })
     assert.deepEqual(r.negatives, [])
+  })
+
+  test('recall records retrievals (generality is no longer always 0)', async () => {
+    const id = await add(store, { name: 'p', task: 'sort numbers' })
+    await recall(store, embedder, 'sort numbers', { k: 5 })
+    assert.ok(store.distinctRetrievalTasks(id) >= 1)
+  })
+
+  test('warm and cold tier skills are excluded from recall', async () => {
+    const id = await add(store, { name: 'p', task: 'sort numbers' })
+    const s = store.get(id)!
+    s.tier = 'warm'
+    store.update(s)
+    const r = await recall(store, embedder, 'sort numbers', { k: 5 })
+    assert.ok(!r.selected.some((x) => x.id === id))
+  })
+
+  test('maxNegatives controls how many known failures surface', async () => {
+    for (const ap of ['regex', 'manual loop', 'split join']) {
+      await recordFailure(store, embedder, { task: 'parse nested json', approach: ap, reason: 'x' })
+    }
+    const def = await recall(store, embedder, 'parse nested json', { k: 5 })
+    assert.equal(def.negatives.length, 1)
+    const more = await recall(store, embedder, 'parse nested json', { k: 5, maxNegatives: 3 })
+    assert.equal(more.negatives.length, 3)
   })
 })

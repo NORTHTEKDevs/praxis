@@ -7,7 +7,7 @@ import { verifySkill } from './verify.ts'
 import type { VerifyResult } from './verify.ts'
 import { maybeMerge } from './dedup.ts'
 import { recall } from './retrieve.ts'
-import type { RecallResult } from './retrieve.ts'
+import type { RecallResult, RecallOptions } from './retrieve.ts'
 import { runSkill } from './run.ts'
 import type { RunResult } from './run.ts'
 import { reinforce, retier } from './utility.ts'
@@ -15,50 +15,9 @@ import { recordFailure } from './negative.ts'
 import type { FailureInput } from './negative.ts'
 import { resolveComposition, parseCalls, quarantineCascade } from './composition.ts'
 import type { Skill, SkillStatus } from './skill.ts'
+import { RateLimiter, Semaphore, RateLimitError } from './concurrency.ts'
 
-export class RateLimitError extends Error {}
-
-// Sliding-window rate limiter.
-export class RateLimiter {
-  max: number
-  windowMs: number
-  hits: number[]
-  constructor(max: number, windowMs: number) {
-    this.max = max
-    this.windowMs = windowMs
-    this.hits = []
-  }
-  allow(now = Date.now()): boolean {
-    this.hits = this.hits.filter((t) => now - t < this.windowMs)
-    if (this.hits.length >= this.max) return false
-    this.hits.push(now)
-    return true
-  }
-}
-
-// Bounds the number of concurrent sandbox workers (a flooding agent must not spawn
-// unbounded workers and OOM the host).
-export class Semaphore {
-  max: number
-  active: number
-  queue: Array<() => void>
-  constructor(max: number) {
-    this.max = max
-    this.active = 0
-    this.queue = []
-  }
-  async run(fn: () => Promise<unknown>): Promise<unknown> {
-    if (this.active >= this.max) await new Promise<void>((res) => this.queue.push(res))
-    this.active++
-    try {
-      return await fn()
-    } finally {
-      this.active--
-      const next = this.queue.shift()
-      if (next) next()
-    }
-  }
-}
+export { RateLimiter, Semaphore, RateLimitError }
 
 export interface RememberResult {
   id: string
@@ -124,12 +83,9 @@ export class Praxis {
 
     if (v.status === 'verified') {
       const d = await maybeMerge(this.store, candidate, this.embedder)
-      if (d.action === 'inserted') {
-        for (const dep of deps) this.store.addDep(d.id, dep)
-        retier(this.store, this.hotCap)
-        return { id: d.id, status: 'verified' }
-      }
-      return { id: d.id, status: 'verified', reason: d.action }
+      if (d.action === 'inserted') for (const dep of deps) this.store.addDep(d.id, dep)
+      retier(this.store, this.hotCap)
+      return { id: d.id, status: 'verified', reason: d.action === 'inserted' ? undefined : d.action }
     }
 
     candidate.embedding = await this.embedder.embed(this.text(candidate))
@@ -137,7 +93,7 @@ export class Praxis {
     return { id, status: v.status, reason: v.reason }
   }
 
-  recall(query: string, opts?: { k?: number; tokenBudget?: number }): Promise<RecallResult> {
+  recall(query: string, opts?: RecallOptions): Promise<RecallResult> {
     return recall(this.store, this.embedder, query, opts)
   }
 
@@ -146,18 +102,24 @@ export class Praxis {
   }
 
   recordFailure(input: FailureInput): Promise<string> {
+    if (!this.limiter.allow()) throw new RateLimitError('record_failure rate limit exceeded')
     return recordFailure(this.store, this.embedder, input)
   }
 
   async reinforce(id: string, outcome: 'success' | 'failure'): Promise<Skill | undefined> {
+    if (!this.store.get(id)) throw new Error(`reinforce: no skill with id ${id}`)
     const r = await reinforce(this.store, id, outcome)
     if (r && r.status !== 'verified') quarantineCascade(this.store, id)
+    retier(this.store, this.hotCap)
     return r
   }
 
   pin(id: string, pinned = true): void {
     const s = this.store.get(id)
-    if (!s) return
+    if (!s) throw new Error(`pin: no skill with id ${id}`)
+    if (pinned && (s.status !== 'verified' || s.kind !== 'positive')) {
+      throw new Error('pin: only verified positive skills may be pinned')
+    }
     s.pinned = pinned
     this.store.update(s)
   }

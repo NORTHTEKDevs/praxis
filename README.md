@@ -50,7 +50,7 @@ The library is self-pruning, not append-only:
 
 1. **Verify gate at entry** - failed attempts never become skills.
 2. **Dedup + merge on write** - a near-duplicate reinforces the existing skill instead of adding one.
-3. **Utility-weighted tiering** with a bounded hot set; cold skills are archived (still callable).
+3. **Utility-weighted tiering** with a bounded hot set; warm/cold skills are excluded from recall but stay callable by id (and can be promoted back by consolidation).
 4. **Budgeted top-k retrieval** - context-cost is **O(k) tokens, bounded by `tokenBudget`, independent of library size**. (Retrieval *compute* is O(hot-set size), bounded by the hot-set cap - not O(1).)
 5. **Consolidation pass** - regression-safe dedup-merge + eviction.
 

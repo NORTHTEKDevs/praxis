@@ -51,9 +51,9 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'recall_skills',
       description: 'Retrieve the top-k verified skills for a query, plus known failure modes (negatives) to check before retrying.',
-      inputSchema: { type: 'object', required: ['query'], properties: { query: str('task description'), k: { type: 'number' }, tokenBudget: { type: 'number' } } },
+      inputSchema: { type: 'object', required: ['query'], properties: { query: str('task description'), k: { type: 'number' }, tokenBudget: { type: 'number' }, maxNegatives: { type: 'number', description: 'max known-failure modes to return (default 1)' } } },
       handler: async (a) => {
-        const r = await px.recall(String(a.query), { k: a.k as number, tokenBudget: a.tokenBudget as number })
+        const r = await px.recall(String(a.query), { k: a.k as number, tokenBudget: a.tokenBudget as number, maxNegatives: a.maxNegatives as number })
         return { skills: r.selected, negatives: r.negatives, costEstimate: r.costEstimate }
       },
     },
@@ -66,7 +66,7 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'record_failure',
       description: 'Record a known failure mode as a first-class negative skill, surfaced before similar retries.',
-      inputSchema: { type: 'object', required: ['task', 'approach', 'reason'], properties: { task: str('the task'), approach: str('what was tried'), reason: str('why it failed') } },
+      inputSchema: { type: 'object', required: ['task', 'approach', 'reason'], properties: { task: { type: 'string', description: 'the task', maxLength: 2000 }, approach: { type: 'string', description: 'what was tried', maxLength: 2000 }, reason: { type: 'string', description: 'why it failed', maxLength: 2000 } } },
       handler: (a) => px.recordFailure(a as never),
     },
     {
