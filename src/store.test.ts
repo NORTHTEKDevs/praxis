@@ -1,5 +1,8 @@
 import { test, describe, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { rmSync } from 'node:fs'
 import { SkillStore } from './store.ts'
 import type { Skill } from './skill.ts'
 
@@ -13,9 +16,16 @@ const mk = (over: Partial<Skill> = {}): Skill => ({
   cost: 'cheap',
   provenance: { task: 'reverse a string', model: 'test', parents: [], createdAt: 0, evidence: '' },
   embedding: [0.1, 0.2],
+  embedderVersion: 'hashing-v1',
   utilityScore: 0,
   status: 'quarantined',
   version: 1,
+  kind: 'positive',
+  tier: 'hot',
+  uses: 0,
+  successRate: 1,
+  pinned: false,
+  checkStrength: 1,
   ...over,
 })
 
@@ -49,8 +59,61 @@ describe('SkillStore', () => {
     )
   })
 
-  test('embedding + provenance survive round-trip', () => {
-    const id = store.insert(mk({ embedding: [0.5, 0.6, 0.7] }))
-    assert.deepEqual(store.get(id)?.embedding, [0.5, 0.6, 0.7])
+  test('all hardening fields round-trip', () => {
+    const id = store.insert(
+      mk({ embedding: [0.5, 0.6, 0.7], kind: 'negative', tier: 'cold', uses: 3, successRate: 0.5, pinned: true, checkStrength: 2 }),
+    )
+    const got = store.get(id)
+    assert.deepEqual(got?.embedding, [0.5, 0.6, 0.7])
+    assert.equal(got?.kind, 'negative')
+    assert.equal(got?.tier, 'cold')
+    assert.equal(got?.uses, 3)
+    assert.equal(got?.successRate, 0.5)
+    assert.equal(got?.pinned, true)
+    assert.equal(got?.checkStrength, 2)
+  })
+
+  test('listByTier filters', () => {
+    store.insert(mk({ name: 'h', tier: 'hot' }))
+    store.insert(mk({ name: 'c', tier: 'cold' }))
+    assert.deepEqual(
+      store.listByTier('cold').map((s) => s.name),
+      ['c'],
+    )
+  })
+
+  test('skill_deps and dependentsOf', () => {
+    store.addDep('composed', 'leaf')
+    assert.deepEqual(store.dependentsOf('leaf'), ['composed'])
+  })
+
+  test('skill_retrievals distinct task count', () => {
+    store.recordRetrieval('s1', 'taskA', 1)
+    store.recordRetrieval('s1', 'taskA', 2)
+    store.recordRetrieval('s1', 'taskB', 3)
+    assert.equal(store.distinctRetrievalTasks('s1'), 2)
+  })
+
+  test('skills persist across reopen (named file)', () => {
+    const base = join(tmpdir(), 'praxis-persist-test.db')
+    const clean = () => {
+      for (const f of [base, base + '-wal', base + '-shm', base + '-journal']) {
+        try {
+          rmSync(f)
+        } catch {}
+      }
+    }
+    clean()
+    const s1 = new SkillStore(base)
+    const id = s1.insert(mk({ embedding: [0.5, 0.6, 0.7], status: 'verified', pinned: true }))
+    s1.close()
+    const s2 = new SkillStore(base)
+    const got = s2.get(id)
+    s2.close()
+    clean()
+    assert.equal(got?.name, 'reverse')
+    assert.equal(got?.status, 'verified')
+    assert.equal(got?.pinned, true)
+    assert.deepEqual(got?.embedding, [0.5, 0.6, 0.7])
   })
 })

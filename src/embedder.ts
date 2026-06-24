@@ -31,7 +31,10 @@ export class HashingEmbedder implements Embedder {
 }
 
 export function cosine(a: number[], b: number[]): number {
-  const n = Math.min(a.length, b.length)
+  // Mismatched dimensions => different embedder spaces => NOT comparable. Return 0
+  // (no match) rather than silently truncating, which would corrupt dedup/retrieval.
+  if (a.length !== b.length) return 0
+  const n = a.length
   let dot = 0
   let na = 0
   let nb = 0
