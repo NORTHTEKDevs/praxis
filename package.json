@@ -1,0 +1,7 @@
+{
+  "name": "praxis",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Verified, composable, self-pruning skill library for AI agents"
+}
