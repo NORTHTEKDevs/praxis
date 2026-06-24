@@ -21,27 +21,40 @@ export function parseCalls(impl: string): string[] {
   const names = new Set<string>()
   const n = impl.length
   let i = 0
-  // 'code' | 'line' | 'block' | a quote char (the open string delimiter)
-  let state = 'code'
+  // stack of frames; top is the active lexer state. 'interp' is the code inside a template
+  // literal ${...} and tracks its own brace depth so nested {} do not close it early.
+  const stack: Array<{ kind: string; depth: number }> = [{ kind: 'code', depth: 0 }]
+  const top = () => stack[stack.length - 1]
   while (i < n) {
+    const f = top()
     const c = impl[i]
     const c2 = impl[i + 1]
-    if (state === 'code') {
-      if (c === '/' && c2 === '/') { state = 'line'; i += 2; continue }
-      if (c === '/' && c2 === '*') { state = 'block'; i += 2; continue }
-      if (c === "'" || c === '"' || c === '`') { state = c; i++; continue }
-      if (c === 'c' && (i === 0 || !/[\w$]/.test(impl[i - 1]))) {
+    if (f.kind === 'code' || f.kind === 'interp') {
+      if (c === '/' && c2 === '/') { stack.push({ kind: 'line', depth: 0 }); i += 2; continue }
+      if (c === '/' && c2 === '*') { stack.push({ kind: 'block', depth: 0 }); i += 2; continue }
+      if (c === "'") { stack.push({ kind: 'sq', depth: 0 }); i++; continue }
+      if (c === '"') { stack.push({ kind: 'dq', depth: 0 }); i++; continue }
+      if (c === '`') { stack.push({ kind: 'tpl', depth: 0 }); i++; continue }
+      if (f.kind === 'interp') {
+        if (c === '{') { f.depth++; i++; continue }
+        if (c === '}') { if (f.depth === 0) stack.pop(); else f.depth--; i++; continue }
+      }
+      // skip call() that is actually part of recall()/a regex literal (preceding /).
+      if (c === 'c' && (i === 0 || !/[\w$/]/.test(impl[i - 1]))) {
         const m = CALL_AT.exec(impl.slice(i))
         if (m) { names.add(m[2]); i += m[0].length; continue }
       }
       i++
       continue
     }
-    if (state === 'line') { if (c === '\n') state = 'code'; i++; continue }
-    if (state === 'block') { if (c === '*' && c2 === '/') { state = 'code'; i += 2 } else i++; continue }
-    // inside a string/template literal: skip contents, honoring escapes
+    if (f.kind === 'line') { if (c === '\n') stack.pop(); i++; continue }
+    if (f.kind === 'block') { if (c === '*' && c2 === '/') { stack.pop(); i += 2 } else i++; continue }
+    if (f.kind === 'sq') { if (c === '\\') i += 2; else { if (c === "'") stack.pop(); i++ } continue }
+    if (f.kind === 'dq') { if (c === '\\') i += 2; else { if (c === '"') stack.pop(); i++ } continue }
+    // template literal: skip text, enter 'interp' on ${, honor escapes, close on backtick
     if (c === '\\') { i += 2; continue }
-    if (c === state) state = 'code'
+    if (c === '$' && c2 === '{') { stack.push({ kind: 'interp', depth: 0 }); i += 2; continue }
+    if (c === '`') stack.pop()
     i++
   }
   return [...names]

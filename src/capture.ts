@@ -25,20 +25,23 @@ export function captureSkill(input: CaptureInput): Skill {
   if (!input.name?.trim()) throw new Error('capture: name required')
   if (!input.implementation?.trim()) throw new Error('capture: implementation required')
 
+  // bound field lengths so a misbehaving caller cannot write unbounded data.
+  const TEXT = 2000
+  const CODE = 50_000
   const provenance: Provenance = {
-    task: input.task ?? '',
-    model: input.model ?? 'unknown',
+    task: (input.task ?? '').slice(0, TEXT),
+    model: (input.model ?? 'unknown').slice(0, 200),
     parents: input.parents ?? [],
     createdAt: input.createdAt ?? Date.now(),
-    evidence: input.evidence ?? '',
+    evidence: (input.evidence ?? '').slice(0, TEXT),
   }
 
   return {
     id: '',
-    name: input.name.trim(),
-    interface: input.interface ?? '',
-    implementation: input.implementation,
-    acceptanceTest: input.acceptanceTest ?? '',
+    name: input.name.trim().slice(0, 200),
+    interface: (input.interface ?? '').slice(0, TEXT),
+    implementation: input.implementation.slice(0, CODE),
+    acceptanceTest: (input.acceptanceTest ?? '').slice(0, CODE),
     capabilities: input.capabilities ?? [],
     cost: input.cost ?? 'normal',
     provenance,

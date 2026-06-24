@@ -45,6 +45,7 @@ export function buildTools(px: Praxis): ToolDef[] {
           task: str('what the skill does'),
           capabilities: { type: 'array', items: { type: 'string' }, description: 'declared side effects' },
         },
+        additionalProperties: false,
       },
       handler: (a) => px.remember(a as never),
     },
@@ -94,7 +95,7 @@ export function buildTools(px: Praxis): ToolDef[] {
       name: 'consolidate_now',
       description: 'Run a consolidation pass: regression-safe dedup-merge + cold eviction.',
       inputSchema: { type: 'object', properties: { dryRun: { type: 'boolean' } } },
-      handler: (a) => consolidate(px.store, px.embedder, { dryRun: a.dryRun as boolean }),
+      handler: (a) => consolidate(px.store, px.embedder, { dryRun: a.dryRun as boolean, hotCap: px.hotCap }),
     },
   ]
 }

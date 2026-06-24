@@ -62,4 +62,15 @@ describe('maybeMerge (dedup on write)', () => {
     assert.equal(r.action, 'reinforced')
     assert.equal(r.id, vId) // reinforced the VERIFIED one, not dropped against the quarantined
   })
+
+  test('a verified candidate is inserted (not dropped) when only a quarantined near-match exists', async () => {
+    const q = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    q.embedding = await embedder.embed('reverse-string (s:string)->string reverse a string')
+    store.insert(q) // quarantined
+    const c = cand('reverse-string', '(s:string)->string', 'reverse a string')
+    c.status = 'verified'
+    const r = await maybeMerge(store, c, embedder)
+    assert.equal(r.action, 'inserted')
+    assert.equal(store.all().length, 2)
+  })
 })

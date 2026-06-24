@@ -95,6 +95,12 @@ describe('Praxis integration', () => {
     const id = px.store.insert(s)
     assert.throws(() => px.pin(id), /only verified/)
   })
+
+  test('recordFailure shares the rate limiter (also throttled)', async () => {
+    const p = new Praxis(undefined, undefined, { rememberPerMin: 1 })
+    await p.recordFailure({ task: 'x', approach: 'y', reason: 'z' })
+    await assert.rejects(p.recordFailure({ task: 'x2', approach: 'y2', reason: 'z2' }), RateLimitError)
+  })
 })
 
 describe('RateLimiter', () => {

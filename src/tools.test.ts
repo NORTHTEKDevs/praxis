@@ -50,4 +50,18 @@ describe('MCP tools', () => {
     assert.equal(r.isError, true)
     assert.match(r.content[0].text, /no skill/)
   })
+
+  test('run_skill handler executes a verified skill end-to-end', async () => {
+    const px = new Praxis()
+    const rem = (await byName(px, 'remember_skill').handler({ name: 'double', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double' })) as { id: string }
+    const out = (await byName(px, 'run_skill').handler({ id: rem.id, input: 5 })) as { output: unknown }
+    assert.equal(out.output, 10)
+  })
+
+  test('pin_skill handler flips the pinned flag', async () => {
+    const px = new Praxis()
+    const rem = (await byName(px, 'remember_skill').handler({ name: 'double', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double' })) as { id: string }
+    await byName(px, 'pin_skill').handler({ id: rem.id })
+    assert.equal(px.store.get(rem.id)?.pinned, true)
+  })
 })

@@ -57,8 +57,9 @@ export async function reinforce(
 // of tier. Pinned skills are always hot and never demoted (they bypass the cap).
 export function retier(store: SkillStore, hotCap = DEFAULT_HOT_CAP): void {
   const verified = store.listByStatus('verified').filter((s) => s.kind === 'positive')
+  const counts = store.allDistinctRetrievalCounts()
   const scored = verified
-    .map((s) => ({ s, score: utilityScore(s, store.distinctRetrievalTasks(s.id)) }))
+    .map((s) => ({ s, score: utilityScore(s, counts.get(s.id) ?? 0) }))
     .sort((a, b) => b.score - a.score)
 
   let rank = 0

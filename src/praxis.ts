@@ -58,6 +58,7 @@ export class Praxis {
   async remember(input: CaptureInput): Promise<RememberResult> {
     if (!this.limiter.allow()) throw new RateLimitError('remember rate limit exceeded')
     const candidate = captureSkill(input)
+    candidate.kind = 'positive' // recordFailure is the only path that creates negatives
 
     let deps: string[] = []
     let subImpls: Record<string, string> = {}
@@ -101,7 +102,7 @@ export class Praxis {
     return runSkill(this.store, id, input, { maxDepth: this.maxDepth })
   }
 
-  recordFailure(input: FailureInput): Promise<string> {
+  async recordFailure(input: FailureInput): Promise<string> {
     if (!this.limiter.allow()) throw new RateLimitError('record_failure rate limit exceeded')
     return recordFailure(this.store, this.embedder, input)
   }

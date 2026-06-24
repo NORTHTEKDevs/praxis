@@ -91,4 +91,14 @@ describe('runSkill + composition', () => {
     const id = store.insert(s)
     await assert.rejects(runSkill(store, id, 1), /negative record/)
   })
+
+  test('cascade quarantine propagates through multiple hops (A->B->C)', () => {
+    const c = addVerified({ name: 'C', impl: 'return 1' })
+    const b = addVerified({ name: 'B', impl: 'return call("C", input)', deps: [c] })
+    const a = addVerified({ name: 'A', impl: 'return call("B", input)', deps: [b] })
+    store.updateStatus(c, 'quarantined')
+    quarantineCascade(store, c)
+    assert.equal(store.get(b)?.status, 'quarantined')
+    assert.equal(store.get(a)?.status, 'quarantined')
+  })
 })

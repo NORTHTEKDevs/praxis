@@ -51,10 +51,13 @@ export async function maybeMerge(
   // of cosine ordering -> reinforce it (recompute its utility via the formula, not a raw +1).
   const verifiedBest = bestOf(store.listByStatus('verified'))
   if (verifiedBest) {
-    verifiedBest.skill.uses += 1
-    verifiedBest.skill.utilityScore = utilityScore(verifiedBest.skill, store.distinctRetrievalTasks(verifiedBest.skill.id))
-    store.update(verifiedBest.skill)
-    return { action: 'reinforced', id: verifiedBest.skill.id, cosine: verifiedBest.sim }
+    const s = verifiedBest.skill
+    const newUses = s.uses + 1
+    s.successRate = (s.successRate * s.uses + 1) / newUses // a dedup hit counts as a success
+    s.uses = newUses
+    s.utilityScore = utilityScore(s, store.distinctRetrievalTasks(s.id))
+    store.update(s)
+    return { action: 'reinforced', id: s.id, cosine: verifiedBest.sim }
   }
 
   // No verified match. A quarantined near-duplicate only suppresses re-inserting ANOTHER

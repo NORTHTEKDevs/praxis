@@ -7,6 +7,7 @@ import { EMBEDDER_VERSION } from './skill.ts'
 import type { Skill } from './skill.ts'
 import { Semaphore } from './concurrency.ts'
 import { retier, DEFAULT_HOT_CAP } from './utility.ts'
+import { resolveComposition } from './composition.ts'
 
 export interface ConsolidateResult {
   merged: number
@@ -22,6 +23,7 @@ export interface ConsolidateOpts {
   evictThreshold?: number
   lengthRatioMax?: number
   concurrency?: number
+  hotCap?: number
 }
 
 // Per-store in-process mutex: two passes on the SAME store must not interleave writes;
@@ -88,11 +90,21 @@ export async function consolidate(
       cluster.sort((x, y) => y.checkStrength - x.checkStrength || y.utilityScore - x.utilityScore)
       const keeper = cluster[0]
       const others = cluster.slice(1)
+      // a composed keeper must verify WITH its sub-skills resolved (otherwise call() throws
+      // and the merge-safety check is a false negative). Skip clusters we cannot resolve.
+      const keeperComp = resolveComposition(store, keeper.implementation, keeper.capabilities)
+      if (!keeperComp.ok) {
+        flagged++
+        continue
+      }
       let safe = true
       for (const o of others) {
         if (!o.acceptanceTest.trim()) continue
         const v = (await sem.run(() =>
-          verifySkill({ implementation: keeper.implementation, acceptanceTest: o.acceptanceTest }),
+          verifySkill(
+            { implementation: keeper.implementation, acceptanceTest: o.acceptanceTest },
+            { subImpls: keeperComp.subImpls },
+          ),
         )) as VerifyResult
         if (v.status !== 'verified') {
           safe = false
@@ -116,7 +128,7 @@ export async function consolidate(
     }
 
     // refresh tiers on the surviving verified set so recall sees current utility.
-    if (!dryRun) retier(store, DEFAULT_HOT_CAP)
+    if (!dryRun) retier(store, opts.hotCap ?? DEFAULT_HOT_CAP)
     return { merged, flagged, evicted, durationMs: Date.now() - start }
   } finally {
     lock.busy = false

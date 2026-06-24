@@ -17,6 +17,7 @@ describe('captureSkill', () => {
     assert.deepEqual(s.embedding, [])
     assert.equal(s.name, 'double')
     assert.equal(s.provenance.task, 'double a number')
+    assert.ok(s.provenance.createdAt > 0) // recency is live, not 0
   })
 
   test('throws without a name', () => {

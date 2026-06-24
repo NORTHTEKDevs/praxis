@@ -47,9 +47,9 @@ export class SkillStore {
       CREATE TABLE IF NOT EXISTS skill_retrievals (
         skill_id TEXT NOT NULL,
         task TEXT NOT NULL,
-        retrieved_at INTEGER NOT NULL
+        retrieved_at INTEGER NOT NULL,
+        PRIMARY KEY (skill_id, task)
       );
-      CREATE INDEX IF NOT EXISTS idx_retrievals_skill ON skill_retrievals(skill_id);
     `)
     const row = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as
       | { version: number }
@@ -110,6 +110,8 @@ export class SkillStore {
 
   delete(id: string): void {
     this.db.prepare('DELETE FROM skills WHERE id = ?').run(id)
+    this.db.prepare('DELETE FROM skill_retrievals WHERE skill_id = ?').run(id)
+    this.db.prepare('DELETE FROM skill_deps WHERE skill_id = ? OR dep_id = ?').run(id, id)
   }
 
   addDep(skillId: string, depId: string): void {
@@ -124,8 +126,10 @@ export class SkillStore {
   }
 
   recordRetrieval(skillId: string, task: string, retrievedAt: number): void {
+    // OR REPLACE keyed on (skill_id, task) bounds the table to distinct (skill, task)
+    // pairs -- exactly what generality counts -- instead of one row per recall forever.
     this.db
-      .prepare('INSERT INTO skill_retrievals (skill_id, task, retrieved_at) VALUES (?, ?, ?)')
+      .prepare('INSERT OR REPLACE INTO skill_retrievals (skill_id, task, retrieved_at) VALUES (?, ?, ?)')
       .run(skillId, task, retrievedAt)
   }
 
@@ -134,6 +138,16 @@ export class SkillStore {
       .prepare('SELECT COUNT(DISTINCT task) AS n FROM skill_retrievals WHERE skill_id = ?')
       .get(skillId) as { n: number }
     return row.n
+  }
+
+  // One query for all skills (used by retier instead of N per-skill SELECTs).
+  allDistinctRetrievalCounts(): Map<string, number> {
+    const rows = this.db
+      .prepare('SELECT skill_id, COUNT(DISTINCT task) AS n FROM skill_retrievals GROUP BY skill_id')
+      .all()
+    const m = new Map<string, number>()
+    for (const r of rows) m.set((r as { skill_id: string }).skill_id, (r as { n: number }).n)
+    return m
   }
 
   close(): void {

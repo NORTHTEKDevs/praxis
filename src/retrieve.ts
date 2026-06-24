@@ -2,6 +2,7 @@ import type { Skill } from './skill.ts'
 import type { Embedder } from './embedder.ts'
 import { cosine } from './embedder.ts'
 import { SkillStore } from './store.ts'
+import { recencyDecay } from './utility.ts'
 
 export interface RecallOptions {
   k?: number
@@ -15,13 +16,6 @@ export interface RecallResult {
   negatives: Skill[]
   costEstimate: number
   retrievalMs: number
-}
-
-function recencyDecay(createdAt: number, halfLifeDays = 30): number {
-  if (!createdAt || createdAt <= 0) return 1
-  const days = (Date.now() - createdAt) / 86_400_000
-  if (days <= 0) return 1
-  return Math.exp((-Math.LN2 * days) / halfLifeDays)
 }
 
 function estTokens(s: Skill): number {
