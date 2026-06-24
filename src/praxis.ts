@@ -5,7 +5,7 @@ import { captureSkill } from './capture.ts'
 import type { CaptureInput } from './capture.ts'
 import { verifySkill } from './verify.ts'
 import type { VerifyResult } from './verify.ts'
-import { maybeMerge } from './dedup.ts'
+import { maybeMerge, findStatusDuplicate } from './dedup.ts'
 import { recall } from './retrieve.ts'
 import type { RecallResult, RecallOptions } from './retrieve.ts'
 import { runSkill } from './run.ts'
@@ -62,6 +62,19 @@ export class Praxis {
     return run
   }
 
+  // store a non-verified candidate, deduped against same-status near-duplicates (so repeated
+  // remember() of an identical broken skill does not accumulate rows), under the write-lock.
+  private async insertNonVerified(candidate: Skill, status: SkillStatus, reason?: string): Promise<RememberResult> {
+    candidate.status = status
+    return (await this.withLock(async () => {
+      candidate.embedding = await this.embedder.embed(this.text(candidate))
+      const dup = await findStatusDuplicate(this.store, candidate, this.embedder)
+      if (dup) return { id: dup, status, reason: 'duplicate' }
+      const id = this.store.insert(candidate)
+      return { id, status, reason }
+    })) as RememberResult
+  }
+
   private text(s: Skill): string {
     return `${s.name} ${s.interface} ${s.provenance.task}`
   }
@@ -77,10 +90,7 @@ export class Praxis {
     if (parseCalls(candidate.implementation).length > 0) {
       const comp = resolveComposition(this.store, candidate.implementation, candidate.capabilities, this.maxDepth)
       if (!comp.ok) {
-        candidate.status = 'quarantined'
-        candidate.embedding = await this.embedder.embed(this.text(candidate))
-        const id = this.store.insert(candidate)
-        return { id, status: 'quarantined', reason: comp.reason }
+        return this.insertNonVerified(candidate, 'quarantined', comp.reason)
       }
       subImpls = comp.subImpls
       deps = comp.deps
@@ -109,9 +119,7 @@ export class Praxis {
       })) as RememberResult
     }
 
-    candidate.embedding = await this.embedder.embed(this.text(candidate))
-    const id = this.store.insert(candidate)
-    return { id, status: v.status, reason: v.reason }
+    return this.insertNonVerified(candidate, v.status, v.reason)
   }
 
   recall(query: string, opts?: RecallOptions): Promise<RecallResult> {

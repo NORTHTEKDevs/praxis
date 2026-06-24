@@ -104,11 +104,17 @@ export function resolveComposition(
 // When a skill is demoted out of 'verified', any composed skill that depends on it can no
 // longer be trusted (it passed its acceptance test against a sub-skill that is now gone).
 // Cascade quarantine to all transitive dependents. Returns the affected skill ids.
-export function quarantineCascade(store: SkillStore, id: string, reason = 'sub-skill invalidated'): string[] {
+export function quarantineCascade(
+  store: SkillStore,
+  id: string,
+  reason = 'sub-skill invalidated',
+  protect?: Set<string>,
+): string[] {
   const affected: string[] = []
   void reason
   const walk = (depId: string) => {
     for (const parent of store.dependentsOf(depId)) {
+      if (protect && protect.has(parent)) continue // e.g. a merge keeper must not be cascaded by its own fold
       const p = store.get(parent)
       if (p && p.status === 'verified') {
         store.updateStatus(parent, 'quarantined')

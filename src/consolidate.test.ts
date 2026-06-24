@@ -143,4 +143,13 @@ describe('consolidate + reindex', () => {
     assert.equal(store.get(subId)?.status, 'archived')
     assert.equal(store.get(compId)?.status, 'quarantined')
   })
+
+  test('a merge keeper is NOT cascade-quarantined by folding a sibling it depends on', async () => {
+    const k = await addVerified(store, { name: 'k', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 10 })
+    const s1 = await addVerified(store, { name: 'k', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 5 })
+    await addVerified(store, { name: 'k', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 0 })
+    store.addDep(k, s1) // keeper depends (by id) on a sibling that will be folded
+    await consolidate(store, embedder)
+    assert.equal(store.get(k)?.status, 'verified')
+  })
 })

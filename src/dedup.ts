@@ -72,3 +72,21 @@ export async function maybeMerge(
   const id = store.insert(candidate)
   return { action: 'inserted', id, cosine: (verifiedBest ?? quarBest)?.sim ?? 0 }
 }
+
+// Find an existing SAME-STATUS near-duplicate (used to avoid accumulating identical
+// non-verified rows from repeated remember() of the same broken skill). Returns its id or null.
+export async function findStatusDuplicate(
+  store: SkillStore,
+  candidate: Skill,
+  embedder: Embedder,
+  threshold = 0.92,
+): Promise<string | null> {
+  const emb = candidate.embedding.length > 0 ? candidate.embedding : await embedder.embed(skillText(candidate))
+  candidate.embedding = emb
+  for (const s of store.listByStatus(candidate.status)) {
+    if (s.embedding.length === 0 || s.embedderVersion !== candidate.embedderVersion) continue
+    if (!interfaceCompatible(s, candidate)) continue
+    if (cosine(emb, s.embedding) >= threshold) return s.id
+  }
+  return null
+}

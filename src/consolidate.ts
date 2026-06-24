@@ -71,6 +71,7 @@ export async function consolidate(
     const verified = store.listByStatus('verified').filter((s) => s.kind === 'positive' && s.embedding.length > 0)
     const used = new Set<string>()
     const toArchive: string[] = []
+    const keeperIds = new Set<string>()
 
     for (const a of verified) {
       if (used.has(a.id)) continue
@@ -116,7 +117,10 @@ export async function consolidate(
         flagged++
         continue
       }
-      if (!dryRun) for (const o of others) toArchive.push(o.id)
+      if (!dryRun) {
+        for (const o of others) toArchive.push(o.id)
+        keeperIds.add(keeper.id)
+      }
       merged += others.length
     }
 
@@ -125,7 +129,9 @@ export async function consolidate(
     // composed skill that depended (by id) on a now-archived skill.
     if (!dryRun) {
       for (const id of toArchive) store.updateStatus(id, 'archived')
-      for (const id of toArchive) quarantineCascade(store, id)
+      // protect keepers: a keeper that wraps + near-duplicates a folded sibling must not be
+      // cascade-quarantined by its own merge.
+      for (const id of toArchive) quarantineCascade(store, id, 'sub-skill invalidated', keeperIds)
     }
 
     for (const s of store.listByTier('cold')) {

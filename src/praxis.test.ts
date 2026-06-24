@@ -131,6 +131,13 @@ describe('Praxis integration', () => {
     const dups = px.store.listByStatus('verified').filter((s) => s.kind === 'positive' && s.name === 'dup')
     assert.equal(dups.length, 1)
   })
+
+  test('repeated remember of an identical broken skill does not accumulate rows', async () => {
+    await px.remember(valid('broken', 'return 0', 'assert(run(3) === 6)')) // verify fails
+    await px.remember(valid('broken', 'return 0', 'assert(run(3) === 6)'))
+    const broken = px.store.all().filter((s) => s.name === 'broken')
+    assert.equal(broken.length, 1)
+  })
 })
 
 describe('RateLimiter', () => {
