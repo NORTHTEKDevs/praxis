@@ -40,6 +40,31 @@ function lenRatio(a: string, b: string): number {
   return Math.max(x, y) / Math.min(x, y)
 }
 
+// The currently-verified skills the cascade over `survivors` WOULD quarantine, computed without
+// mutating, respecting the per-cluster keeper protect (a fold's own keeper is never cascaded by
+// that fold). Used to detect a cross-cluster collision: a survivor whose keeper appears here must
+// not be archived, or its use case would be left with a quarantined replacement.
+function cascadeAffectedKeepers(store: SkillStore, survivors: string[], archivedKeeper: Map<string, string>): Set<string> {
+  const affected = new Set<string>()
+  for (const start of survivors) {
+    const protect = archivedKeeper.get(start)
+    const stack = [start]
+    while (stack.length) {
+      const depId = stack.pop() as string
+      for (const parent of store.dependentsOf(depId)) {
+        if (parent === protect) continue
+        if (affected.has(parent)) continue
+        const p = store.get(parent)
+        if (p && p.status === 'verified') {
+          affected.add(parent)
+          stack.push(parent)
+        }
+      }
+    }
+  }
+  return affected
+}
+
 // Periodic compaction. v1 merge is DETERMINISTIC (fold true near-duplicates), gated by a
 // regression check: the keeper must pass every folded skill's acceptance test before they
 // are archived. Clusters smaller than minInstances are FLAGGED for human review, never
@@ -134,24 +159,36 @@ export async function consolidate(
     // sub-skill a later cluster's keeper composition depends on. Then cascade-quarantine any
     // composed skill that depended (by id) on a now-archived skill.
     if (!dryRun) {
-      // Re-read each keeper's CURRENT status right before archiving (this whole block is
-      // synchronous -> no interleave). The merge-safety verify above yields the event loop
-      // (await sem.run), so a concurrent reinforce(keeper,'failure') -- which does NOT take the
-      // consolidate lock -- could have demoted a keeper after its cluster was judged safe.
-      // Archiving a folded sibling whose only replacement is a now-quarantined keeper would
-      // destroy a verified skill with no valid substitute, so SKIP those clusters (the fold is
-      // aborted; the siblings stay verified).
-      const survivors = toArchive.filter((id) => {
+      // Stage 1 -- keeper still verified RIGHT NOW (this block is synchronous, no interleave).
+      // The merge-safety verify above yields the event loop (await sem.run), so a concurrent
+      // reinforce(keeper,'failure') could have demoted a keeper after its cluster was judged
+      // safe. Archiving a sibling whose only replacement is now quarantined destroys a verified
+      // skill, so drop that fold.
+      let survivors = toArchive.filter((id) => {
         const k = archivedKeeper.get(id)
-        const ok = !k || store.get(k)?.status === 'verified'
-        if (!ok) merged-- // this fold did not happen
-        return ok
+        return !k || store.get(k)?.status === 'verified'
       })
+      // Stage 2 (cross-cluster) -- one cluster's archival can cascade-quarantine ANOTHER
+      // cluster's keeper (when that keeper depends, by id, on the first cluster's archived
+      // sibling). Archiving the second cluster's siblings would then leave its use case with a
+      // quarantined replacement. Compute the cascade-affected keepers WITHOUT mutating and drop
+      // any survivor whose keeper appears there; iterate to a fixpoint (dropping survivors only
+      // shrinks the affected set, so this converges).
+      for (;;) {
+        const affected = cascadeAffectedKeepers(store, survivors, archivedKeeper)
+        const next = survivors.filter((id) => {
+          const k = archivedKeeper.get(id)
+          return !k || !affected.has(k)
+        })
+        if (next.length === survivors.length) break
+        survivors = next
+      }
+      merged = survivors.length // count only the folds that actually commit
       for (const id of survivors) store.updateStatus(id, 'archived')
       // Cascade-quarantine composed dependents of each archived skill, protecting ONLY that
       // skill's own cluster keeper (a keeper that wraps a folded sibling must survive its own
-      // fold). A GLOBAL keeper protect-set would wrongly shield a keeper from an unrelated
-      // cluster's legitimate cascade -- the cross-cluster stale-verified regression.
+      // fold). A GLOBAL protect-set would wrongly shield a keeper from an unrelated cluster's
+      // legitimate cascade.
       for (const id of survivors) {
         const k = archivedKeeper.get(id)
         quarantineCascade(store, id, 'sub-skill invalidated', k ? new Set([k]) : undefined)

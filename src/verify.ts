@@ -19,9 +19,13 @@ export interface VerifyResult {
 // would falsely look vacuous.
 function literalsIn(at: string): string[] {
   const out = new Set<string>()
-  // double / single / simple-template strings (hasLiteral accepts backticks, so the probe must
-  // too) + numbers. `return ${m[0]}` is valid JS for each captured form.
-  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\$]|\\.)*`|-?\d+(?:\.\d+)?/g)) out.add(m[0])
+  // double / single / template strings (incl. a literal `$` like `$5`) + numbers. Skip
+  // INTERPOLATED templates (${...}) -- their runtime value is not a static literal.
+  // `return ${m[0]}` is valid JS for each captured form.
+  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|-?\d+(?:\.\d+)?/g)) {
+    if (m[0][0] === '`' && m[0].includes('${')) continue
+    out.add(m[0])
+  }
   return [...out].slice(0, 8)
 }
 
@@ -63,7 +67,9 @@ export async function verifySkill(
       '0',
       '""',
       'false',
+      'true',
       'NaN',
+      'Infinity',
       '[]',
       '({})',
       ...literalsIn(skill.acceptanceTest),

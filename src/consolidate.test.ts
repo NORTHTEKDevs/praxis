@@ -168,6 +168,23 @@ describe('consolidate + reindex', () => {
     assert.equal(r.merged, 0) // the aborted fold is not counted as a merge
   })
 
+  test('cross-cluster: a fold is aborted when its keeper would be cascade-quarantined by another cluster', async () => {
+    // cluster A (alpha) folds; B's keeper depends (by id) on an alpha sibling that gets archived,
+    // so B's keeper will be cascade-quarantined -> B's siblings must NOT be archived (else B's use
+    // case is left with a quarantined replacement = silent loss).
+    await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 10 })
+    const a5 = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 5 })
+    await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 0 })
+    const bKeeper = await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 10 })
+    const b5 = await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 5 })
+    const b0 = await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 0 })
+    store.addDep(bKeeper, a5) // B's keeper depends on an alpha sibling that will be archived
+    await consolidate(store, embedder)
+    assert.equal(store.get(bKeeper)?.status, 'quarantined') // keeper cascade-quarantined
+    assert.equal(store.get(b5)?.status, 'verified') // B's fold aborted -> siblings preserved
+    assert.equal(store.get(b0)?.status, 'verified')
+  })
+
   test('cross-cluster: a keeper depending on ANOTHER cluster\'s folded skill IS cascade-quarantined', async () => {
     // two independent clusters (distinct interfaces -> never merged together)
     const a = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input + 1', test: 'assert(run(1) === 2)', utility: 10 })
