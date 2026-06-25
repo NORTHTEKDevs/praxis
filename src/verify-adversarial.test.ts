@@ -104,6 +104,18 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'verified')
   })
 
+  test('an inequality oracle whose target is the 9th+ distinct literal still verifies', async () => {
+    // 8 decoy literals precede the real target -- the extraction cap must not drop "c9".
+    const at = 'const codes = ["c1","c2","c3","c4","c5","c6","c7","c8"]; assert(run(3) !== "c9")'
+    const r = await verifySkill(mk('return "x"', at))
+    assert.equal(r.status, 'verified')
+  })
+
+  test('an inequality oracle against a hex literal verifies', async () => {
+    const r = await verifySkill(mk('return 1', 'assert(run(3) !== 0xFF)'))
+    assert.equal(r.status, 'verified')
+  })
+
   test('an acceptance test that crashes the probe stub instead of asserting does not verify', async () => {
     // detect the string-typed stub and throw a runtime error so the stub exits NON-assertion;
     // the real oracle (|| true) is vacuous. Requiring a clean ASSERTION rejection catches this.

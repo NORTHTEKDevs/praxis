@@ -42,4 +42,9 @@ describe('computeCheckStrength', () => {
   test('run(...) vs undefined is a concrete oracle (scores 1)', () => {
     assert.equal(computeCheckStrength('assert(run(3) === undefined)'), 1)
   })
+
+  test('run(...) vs Infinity / NaN are concrete oracles (score 1)', () => {
+    assert.equal(computeCheckStrength('assert(run(1) === Infinity)'), 1)
+    assert.equal(computeCheckStrength('assert(run(1) !== NaN)'), 1)
+  })
 })

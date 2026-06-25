@@ -22,11 +22,13 @@ function literalsIn(at: string): string[] {
   // double / single / template strings (incl. a literal `$` like `$5`) + numbers. Skip
   // INTERPOLATED templates (${...}) -- their runtime value is not a static literal.
   // `return ${m[0]}` is valid JS for each captured form.
-  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|-?\d+(?:\.\d+)?/g)) {
+  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|0[xX][0-9a-fA-F]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g)) {
     if (m[0][0] === '`' && m[0].includes('${')) continue
     out.add(m[0])
   }
-  return [...out].slice(0, 8)
+  // cap to bound worker spawning on a pathological many-literal test, but generous enough that a
+  // real inequality oracle's target literal is never dropped.
+  return [...out].slice(0, 32)
 }
 
 // Verify-before-keep (fail-closed). A skill becomes `verified` ONLY when its acceptance

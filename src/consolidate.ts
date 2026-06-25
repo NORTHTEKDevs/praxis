@@ -24,6 +24,7 @@ export interface ConsolidateOpts {
   lengthRatioMax?: number
   concurrency?: number
   hotCap?: number
+  sem?: Semaphore // share the caller's verify semaphore so total live Workers stay bounded
 }
 
 // Per-store in-process mutex: two passes on the SAME store must not interleave writes;
@@ -88,7 +89,9 @@ export async function consolidate(
     const evictT = opts.evictThreshold ?? 0.1
     const lenMax = opts.lengthRatioMax ?? 3
     const dryRun = opts.dryRun ?? false
-    const sem = new Semaphore(opts.concurrency ?? 4)
+    // share the caller's verify semaphore when provided so a concurrent consolidate_now + a
+    // saturated remember/reinforce burst cannot exceed the intended live-Worker cap.
+    const sem = opts.sem ?? new Semaphore(opts.concurrency ?? 4)
     let merged = 0
     let flagged = 0
     let evicted = 0

@@ -108,7 +108,7 @@ export function buildTools(px: Praxis): ToolDef[] {
       name: 'consolidate_now',
       description: 'Run a consolidation pass: regression-safe dedup-merge + cold eviction.',
       inputSchema: { type: 'object', properties: { dryRun: { type: 'boolean' } } },
-      handler: (a) => consolidate(px.store, px.embedder, { dryRun: a.dryRun as boolean, hotCap: px.hotCap }),
+      handler: (a) => consolidate(px.store, px.embedder, { dryRun: a.dryRun as boolean, hotCap: px.hotCap, sem: px.sem }),
     },
   ]
 }
