@@ -18,6 +18,7 @@ interface DupOpts {
   embedderVersion?: string
   iface?: string
   task?: string
+  strength?: number
 }
 
 async function addVerified(store: SkillStore, o: DupOpts = {}): Promise<string> {
@@ -34,6 +35,7 @@ async function addVerified(store: SkillStore, o: DupOpts = {}): Promise<string> 
   if (o.utility !== undefined) s.utilityScore = o.utility
   if (o.pinned) s.pinned = true
   if (o.embedderVersion) s.embedderVersion = o.embedderVersion
+  if (o.strength !== undefined) s.checkStrength = o.strength
   return store.insert(s)
 }
 
@@ -166,6 +168,18 @@ describe('consolidate + reindex', () => {
     const r = await p
     assert.equal(store.get(sib)?.status, 'verified') // fold aborted -> sibling not archived
     assert.equal(r.merged, 0) // the aborted fold is not counted as a merge
+  })
+
+  test('a cold low-utility keeper that will be evicted does not drag its healthy siblings into archival', async () => {
+    // the cold+util-0 member is elected keeper (highest checkStrength); the eviction loop will
+    // archive it. Its healthy HOT siblings must survive -- the fold is aborted rather than
+    // archiving them under a keeper that is about to be evicted.
+    await addVerified(store, { name: 'g', iface: '(g)->g', impl: 'return input', test: 'assert(run("a") === "a")', tier: 'cold', utility: 0, strength: 2 })
+    const s1 = await addVerified(store, { name: 'g', iface: '(g)->g', impl: 'return input', test: 'assert(run("a") === "a")', tier: 'hot', utility: 10, strength: 1 })
+    const s2 = await addVerified(store, { name: 'g', iface: '(g)->g', impl: 'return input', test: 'assert(run("a") === "a")', tier: 'hot', utility: 5, strength: 1 })
+    await consolidate(store, embedder)
+    assert.equal(store.get(s1)?.status, 'verified')
+    assert.equal(store.get(s2)?.status, 'verified')
   })
 
   test('cold eviction of a sub-skill aborts a merge fold whose keeper depends on it', async () => {

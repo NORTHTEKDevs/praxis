@@ -181,6 +181,10 @@ export async function consolidate(
         .listByTier('cold')
         .filter((s) => s.status === 'verified' && !s.pinned && s.utilityScore < evictT && !toArchiveSet.has(s.id))
         .map((s) => s.id)
+      // a keeper that is ITSELF an eviction candidate (cold + low-utility) will be archived by the
+      // eviction loop; archiving its siblings here would then strand the use case, so abort that
+      // fold too (its healthy non-cold siblings survive instead of being merged away).
+      const evictStartSet = new Set(evictStarts)
       // Stage 2 (cross-cluster + eviction) -- one cluster's archival OR a cold eviction can
       // cascade-quarantine ANOTHER cluster's keeper (when that keeper depends, by id, on the
       // archived/evicted skill). Archiving the second cluster's siblings would then leave its use
@@ -191,7 +195,7 @@ export async function consolidate(
         const affected = cascadeAffectedKeepers(store, [...survivors, ...evictStarts], archivedKeeper)
         const next = survivors.filter((id) => {
           const k = archivedKeeper.get(id)
-          return !k || !affected.has(k)
+          return !k || (!affected.has(k) && !evictStartSet.has(k))
         })
         if (next.length === survivors.length) break
         survivors = next
