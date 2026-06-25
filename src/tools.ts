@@ -57,7 +57,7 @@ export function buildTools(px: Praxis): ToolDef[] {
         const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
         const k = Math.max(1, Math.min(num(a.k, 5), 50))
         const maxNegatives = Math.max(0, Math.min(num(a.maxNegatives, 1), 20))
-        const tokenBudget = typeof a.tokenBudget === 'number' && Number.isFinite(a.tokenBudget) ? a.tokenBudget : undefined
+        const tokenBudget = typeof a.tokenBudget === 'number' && Number.isFinite(a.tokenBudget) ? Math.max(0, a.tokenBudget) : undefined
         const r = await px.recall(String(a.query), { k, tokenBudget, maxNegatives })
         return { skills: r.selected, negatives: r.negatives, costEstimate: r.costEstimate }
       },

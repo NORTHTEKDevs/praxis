@@ -24,7 +24,7 @@ export class Semaphore {
   active: number
   queue: Array<() => void>
   constructor(max: number) {
-    this.max = max
+    this.max = Math.max(1, max) // max < 1 would deadlock (active>=max true before any run starts)
     this.active = 0
     this.queue = []
   }

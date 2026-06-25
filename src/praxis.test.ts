@@ -217,4 +217,9 @@ describe('Semaphore', () => {
     await Promise.all([task(), task(), task(), task(), task()])
     assert.ok(peak <= 2)
   })
+
+  test('Semaphore(0) is clamped to >=1 and does not deadlock', async () => {
+    const sem = new Semaphore(0)
+    assert.equal(await sem.run(async () => 42), 42)
+  })
 })
