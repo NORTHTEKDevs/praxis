@@ -141,7 +141,10 @@ export class Praxis {
   }
 
   run(id: string, input: unknown): Promise<RunResult> {
-    return runSkill(this.store, id, input, { maxDepth: this.maxDepth })
+    // share the verify semaphore: run() spawns a sandbox Worker too, so an unbounded flood of
+    // run_skill calls would otherwise spawn unbounded worker threads / memory -- the same DoS the
+    // remember() and reinforce() paths are already bounded against.
+    return this.sem.run(() => runSkill(this.store, id, input, { maxDepth: this.maxDepth })) as Promise<RunResult>
   }
 
   async recordFailure(input: FailureInput): Promise<string> {

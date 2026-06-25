@@ -34,6 +34,17 @@ describe('Praxis integration', () => {
     assert.equal(r.status, 'quarantined')
   })
 
+  test('concurrent run() calls all settle under the shared verify semaphore', async () => {
+    const p = new Praxis(undefined, undefined, { maxConcurrentVerify: 2 })
+    const r = await p.remember(valid('dbl', 'return input * 2', 'assert(run(3) === 6)'))
+    const outs = await Promise.all(Array.from({ length: 8 }, (_, i) => p.run(r.id, i)))
+    assert.equal(outs.length, 8)
+    assert.deepEqual(
+      outs.map((o) => o.output),
+      [0, 2, 4, 6, 8, 10, 12, 14],
+    )
+  })
+
   test('remember + run a composed skill', async () => {
     await px.remember(valid('double', 'return input * 2', 'assert(run(3) === 6)'))
     const r = await px.remember(valid('double-plus', 'return call("double", input) + 1', 'assert(run(3) === 7)'))
