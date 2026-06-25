@@ -149,6 +149,19 @@ describe('Praxis integration', () => {
     const r = await p
     assert.notEqual(r.status, 'verified')
   })
+
+  test('concurrent reinforce(failure) calls all settle under the shared verify semaphore', async () => {
+    const p = new Praxis(undefined, undefined, { maxConcurrentVerify: 2 })
+    const ids: string[] = []
+    for (let i = 0; i < 6; i++) {
+      ids.push((await p.remember(valid(`s${i}`, 'return input * 2', 'assert(run(3) === 6)'))).id)
+    }
+    // each reinforce('failure') re-runs verifySkill (anti-regression) through the semaphore;
+    // they must all complete (no unbounded worker spawn, no crash).
+    const results = await Promise.all(ids.map((id) => p.reinforce(id, 'failure')))
+    assert.equal(results.length, 6)
+    assert.ok(results.every((r) => r?.status === 'verified')) // tests still pass -> stay verified
+  })
 })
 
 describe('RateLimiter', () => {

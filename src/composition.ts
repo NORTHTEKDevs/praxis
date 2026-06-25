@@ -78,11 +78,17 @@ export function resolveComposition(
 ): CompositionResolution {
   const subImpls: Record<string, string> = {}
   const deps: string[] = []
+  // global dedup across ALL paths: a diamond DAG (A->B,C; B->D; C->D) must resolve D ONCE, not
+  // once per path. Without this, traversal is exponential in paths (k^maxDepth SQL lookups +
+  // parseCalls scans) -- a DoS reachable through run_skill on a legitimately verified library.
+  const resolved = new Set<string>()
 
   const visit = (code: string, seen: string[], depth: number): string | null => {
     if (depth > maxDepth) return 'max composition depth exceeded'
     for (const name of parseCalls(code)) {
-      if (seen.includes(name)) return `cyclic dependency: ${[...seen, name].join(' -> ')}`
+      if (seen.includes(name)) return `cyclic dependency: ${[...seen, name].join(' -> ')}` // cycle check FIRST
+      if (resolved.has(name)) continue // already resolved via another path; its subtree is identical
+      resolved.add(name)
       const sub = store.findVerifiedByName(name)
       if (!sub) return `unknown or unverified sub-skill: ${name}`
       for (const cap of sub.capabilities) {
