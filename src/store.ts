@@ -10,6 +10,7 @@ const SCHEMA_VERSION = 1
 
 export class SkillStore {
   private db: DatabaseSync
+  private updateStmt: ReturnType<DatabaseSync['prepare']> | undefined
 
   constructor(path = ':memory:') {
     this.db = new DatabaseSync(path)
@@ -75,13 +76,31 @@ export class SkillStore {
   }
 
   update(skill: Skill): void {
-    const sets = COLS.split(',')
-      .filter((c) => c !== 'id')
-      .map((c) => `${c}=?`)
-      .join(',')
+    if (!this.updateStmt) {
+      // the UPDATE SQL is structurally constant; prepare once and reuse (retier issues N of these).
+      const sets = COLS.split(',')
+        .filter((c) => c !== 'id')
+        .map((c) => `${c}=?`)
+        .join(',')
+      this.updateStmt = this.db.prepare(`UPDATE skills SET ${sets} WHERE id=?`)
+    }
     const row = this.toRow(skill.id, skill)
     // move id (first element) to the end for the WHERE clause
-    this.db.prepare(`UPDATE skills SET ${sets} WHERE id=?`).run(...row.slice(1), skill.id)
+    this.updateStmt.run(...row.slice(1), skill.id)
+  }
+
+  // Run fn inside a SINGLE write transaction so a bulk mutation (e.g. retier's N row updates)
+  // commits once instead of N auto-commit transactions each with its own WAL fsync.
+  tx<T>(fn: () => T): T {
+    this.db.exec('BEGIN')
+    try {
+      const r = fn()
+      this.db.exec('COMMIT')
+      return r
+    } catch (e) {
+      this.db.exec('ROLLBACK')
+      throw e
+    }
   }
 
   listByStatus(status: SkillStatus): Skill[] {

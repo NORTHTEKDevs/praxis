@@ -45,7 +45,9 @@ export function parseCalls(impl: string): string[] {
       // (fails CLOSED, safe). We do NOT exclude a preceding '/', because that would silently
       // DROP a real dependency after a division operator (x/call("dep")) - the dangerous
       // direction. Regex-with-call() in skill code is the rare, safe-to-reject case.
-      if (c === 'c' && (i === 0 || !/[\w$]/.test(impl[i - 1]))) {
+      // a preceding '.' means a method call (obj.call("x") = Function.prototype.call), NOT a
+      // sub-skill dependency -> exclude it so it does not write a phantom dep edge.
+      if (c === 'c' && (i === 0 || !/[\w$.]/.test(impl[i - 1]))) {
         const m = CALL_AT.exec(impl.slice(i))
         if (m) { names.add(m[2]); i += m[0].length; continue }
       }

@@ -76,6 +76,14 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'quarantined')
   })
 
+  test('an acceptance test that crashes the probe stub instead of asserting does not verify', async () => {
+    // detect the string-typed stub and throw a runtime error so the stub exits NON-assertion;
+    // the real oracle (|| true) is vacuous. Requiring a clean ASSERTION rejection catches this.
+    const at = 'if (typeof run(0) === "string") { throw new Error("evade") } assert(run(0) === 6 || true)'
+    const r = await verifySkill(mk('return 0', at))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('an acceptance test that detects the probe stub by shape cannot dodge the vacuity check', async () => {
     // detect a stub OBJECT via the old fixed marker and throw to force probe.ok=false, while the
     // real oracle is vacuous (|| true). Marker-free randomized stubs make the detection inert.

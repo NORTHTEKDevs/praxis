@@ -163,8 +163,9 @@ describe('consolidate + reindex', () => {
     // (a concurrent reinforce(keeper,'failure') analogue, which does not take the lock).
     const p = consolidate(store, embedder)
     store.updateStatus(keeper, 'quarantined')
-    await p
+    const r = await p
     assert.equal(store.get(sib)?.status, 'verified') // fold aborted -> sibling not archived
+    assert.equal(r.merged, 0) // the aborted fold is not counted as a merge
   })
 
   test('cross-cluster: a keeper depending on ANOTHER cluster\'s folded skill IS cascade-quarantined', async () => {

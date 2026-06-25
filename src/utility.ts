@@ -71,16 +71,20 @@ export function retier(store: SkillStore, hotCap = DEFAULT_HOT_CAP): void {
     .map((s) => ({ s, score: utilityScore(s, counts.get(s.id) ?? 0) }))
     .sort((a, b) => b.score - a.score)
 
-  let rank = 0
-  for (const { s, score } of scored) {
-    s.utilityScore = score
-    if (s.pinned) {
-      s.tier = 'hot'
+  // one transaction for all N row updates (collapses N WAL fsyncs into 1; cuts the event-loop
+  // stall this loop otherwise causes on every remember()/reinforce() at large verified-set size).
+  store.tx(() => {
+    let rank = 0
+    for (const { s, score } of scored) {
+      s.utilityScore = score
+      if (s.pinned) {
+        s.tier = 'hot'
+        store.update(s)
+        continue
+      }
+      s.tier = rank < hotCap ? 'hot' : rank < hotCap * 4 ? 'warm' : 'cold'
       store.update(s)
-      continue
+      rank++
     }
-    s.tier = rank < hotCap ? 'hot' : rank < hotCap * 4 ? 'warm' : 'cold'
-    store.update(s)
-    rank++
-  }
+  })
 }

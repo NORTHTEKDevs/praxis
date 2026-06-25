@@ -36,6 +36,11 @@ describe('parseCalls', () => {
     assert.deepEqual(parseCalls('return input * 2'), [])
   })
 
+  test('does not treat a method .call("x") as a sub-skill dependency', () => {
+    assert.deepEqual(parseCalls('return [].concat.call("x", input)'), [])
+    assert.deepEqual(parseCalls('return foo.call("bar")'), [])
+  })
+
   test('detects call() hidden inside a template-literal interpolation', () => {
     assert.deepEqual(parseCalls('return `${call("hidden", x)}`'), ['hidden'])
   })

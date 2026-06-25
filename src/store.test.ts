@@ -120,6 +120,19 @@ describe('SkillStore', () => {
     assert.ok(store.listVerifiedNegatives().every((s) => s.kind === 'negative'))
   })
 
+  test('tx commits on success and rolls back on throw', () => {
+    const id = store.insert(mk({ name: 'tx1' }))
+    store.tx(() => store.updateStatus(id, 'verified'))
+    assert.equal(store.get(id)?.status, 'verified')
+    assert.throws(() =>
+      store.tx(() => {
+        store.updateStatus(id, 'archived')
+        throw new Error('boom')
+      }),
+    )
+    assert.equal(store.get(id)?.status, 'verified') // rolled back, not archived
+  })
+
   test('a corrupt JSON row degrades to sentinels instead of denying all reads', () => {
     const base = join(tmpdir(), 'praxis-corrupt-test.db')
     const clean = () => {

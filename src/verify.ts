@@ -34,16 +34,19 @@ export async function verifySkill(
   const r = await runAcceptance(skill.implementation, skill.acceptanceTest, sopts)
   if (r.ok) {
     // Counter-example probe: re-run the acceptance test against STUB implementations that ignore
-    // the input. If a stub ALSO passes, the test does not exercise the implementation (a vacuous/
-    // tautological oracle, e.g. `assert(run(x) === 6 || true)`), so it must NOT verify. The stub
-    // returns an UNPREDICTABLE, marker-free value and we try TWO of them: a crafted test cannot
-    // detect-and-dodge an unknown stub (e.g. by sniffing a fixed `__praxisStub` marker) while
-    // still being a real oracle for both. This catches the short-circuit-bypass class a purely
-    // syntactic strength check cannot.
-    const stubPasses = async (val: string) =>
-      (await runAcceptance(`return ${JSON.stringify(val)}`, skill.acceptanceTest, sopts)).ok
-    if ((await stubPasses(randomUUID())) || (await stubPasses(randomUUID()))) {
-      return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous)' }
+    // the input and return an UNPREDICTABLE, marker-free value. The skill is vacuous UNLESS every
+    // stub is cleanly REJECTED BY AN ASSERTION (the oracle catching the wrong value). A stub that
+    // PASSES means the oracle ignores the implementation; a stub that fails by a NON-assertion
+    // error (runtime/timeout/memory/async, or no assertion ran at all) means the test detected and
+    // EVADED the probe -- e.g. it sniffed the stub's type and crashed instead of asserting. Both
+    // are inconclusive, so fail-closed -> quarantine. Two independent random stubs also defeat
+    // value-guessing and the fixed-marker sniff a single fixed stub allowed.
+    const cleanlyRejected = async (val: string) => {
+      const p = await runAcceptance(`return ${JSON.stringify(val)}`, skill.acceptanceTest, sopts)
+      return !p.ok && p.category === 'assertion'
+    }
+    if (!(await cleanlyRejected(randomUUID())) || !(await cleanlyRejected(randomUUID()))) {
+      return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous or probe-evading)' }
     }
     return { status: 'verified' }
   }
