@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      # Trust-critical suite: verify gate, sandbox tamper, cascade invariant, concurrency.
+      # Runs on Node's native test runner with type-stripping + experimental sqlite (no build step).
+      - run: npm test

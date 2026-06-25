@@ -1,0 +1,16 @@
+{
+  "//": "Editor/IntelliSense type-awareness only. Praxis ships as source and runs via Node's --experimental-strip-types (no build step), so types are stripped at runtime, not compiled. A full `tsc --noEmit` is not wired into CI because the runtime leans on experimental Node built-ins (node:sqlite) that @types/node does not yet describe.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "bench/**/*.ts"]
+}
