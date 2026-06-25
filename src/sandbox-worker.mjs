@@ -100,7 +100,11 @@ if (!posted) {
     const m = o.errorMessage || ''
     if (o.errorName === 'AsyncError' || /ASYNC_SKILL/.test(m)) return 'async'
     if (/timed out/i.test(m)) return 'timeout'
-    if (o.af.length > 0 || (o.errorName === 'AcceptanceError' && o.ac > 0)) return 'assertion'
+    // 'assertion' ONLY when the trusted assert closure recorded a failure (it always pushes to
+    // af BEFORE throwing). A bare AcceptanceError with an empty af was NOT raised by assert -- it
+    // is a forged/broken test, so it falls through to 'runtime' -> quarantined (test error), not
+    // 'refuted' (which wrongly implies the implementation is wrong).
+    if (o.af.length > 0) return 'assertion'
     return 'runtime'
   }
   if (mode === 'exec') {

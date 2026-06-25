@@ -67,6 +67,15 @@ describe('verify gate adversarial suite', () => {
     assert.notEqual(r.status, 'verified')
   })
 
+  test('a forged AcceptanceError with no recorded assert failure is quarantined, not refuted', async () => {
+    // assert once (passing) so ac>=1, then hand-throw an error NAMED AcceptanceError with an
+    // empty failure log. This is a broken/spoof test, not a real assertion failure -> it must
+    // quarantine (test error), never refute (which would imply the implementation is wrong).
+    const at = 'assert(run(1) === 1); const e = new Error("x"); e.name = "AcceptanceError"; throw e'
+    const r = await verifySkill(mk('return input', at))
+    assert.equal(r.status, 'quarantined')
+  })
+
   test('acceptance test cannot forge a pass by trapping the outcome channel (defineProperty)', async () => {
     // install a forged getter + no-op setter on the outcome channel, then fail a REAL assert.
     // The outcome is read as the vm completion value (not a sandbox property), so the trap is
