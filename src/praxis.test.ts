@@ -89,6 +89,15 @@ describe('Praxis integration', () => {
     await assert.rejects(px.reinforce('does-not-exist', 'success'), /no skill/)
   })
 
+  test('reinforce(failure) on a CORRECT composed skill does not quarantine it', async () => {
+    await px.remember(valid('dep', 'return input * 2', 'assert(run(3) === 6)'))
+    const comp = await px.remember(valid('usedep', 'return call("dep", input) + 1', 'assert(run(3) === 7)'))
+    assert.equal(comp.status, 'verified')
+    // the anti-regression re-run must resolve "dep" -> the correct composed skill stays verified
+    const r = await px.reinforce(comp.id, 'failure')
+    assert.equal(r?.status, 'verified')
+  })
+
   test('pin rejects a non-verified skill', async () => {
     const s = captureSkill({ name: 'q', interface: '', implementation: 'return 1', acceptanceTest: 'assert(run(1) === 1)', task: 'q' })
     s.status = 'quarantined'

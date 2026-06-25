@@ -88,6 +88,12 @@ describe('verify gate adversarial suite', () => {
     assert.notEqual(r.status, 'verified')
   })
 
+  test('an inequality oracle against a template-literal string verifies', async () => {
+    // probe must extract `hello` from the test so a stub returns it and is cleanly rejected.
+    const r = await verifySkill(mk('return "x"', 'assert(run(3) !== `hello`)'))
+    assert.equal(r.status, 'verified')
+  })
+
   test('an acceptance test that crashes the probe stub instead of asserting does not verify', async () => {
     // detect the string-typed stub and throw a runtime error so the stub exits NON-assertion;
     // the real oracle (|| true) is vacuous. Requiring a clean ASSERTION rejection catches this.

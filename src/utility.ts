@@ -31,6 +31,7 @@ export async function reinforce(
   store: SkillStore,
   id: string,
   outcome: 'success' | 'failure',
+  subImpls: Record<string, string> = {},
 ): Promise<Skill | undefined> {
   let skill = store.get(id)
   if (!skill) return undefined
@@ -39,7 +40,9 @@ export async function reinforce(
   // event loop; a concurrent quarantine during that window must not be overwritten by a stale
   // snapshot (TOCTOU).
   if (outcome === 'failure' && skill.acceptanceTest.trim()) {
-    const v = await verifySkill({ implementation: skill.implementation, acceptanceTest: skill.acceptanceTest })
+    // pass resolved sub-skill impls so a COMPOSED skill's call('dep') resolves -- otherwise the
+    // re-run throws 'unknown sub-skill' (runtime) and false-quarantines a correct composed skill.
+    const v = await verifySkill({ implementation: skill.implementation, acceptanceTest: skill.acceptanceTest }, { subImpls })
     skill = store.get(id)
     if (!skill) return undefined
     if (v.status !== 'verified') {

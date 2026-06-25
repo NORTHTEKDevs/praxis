@@ -19,7 +19,9 @@ export interface VerifyResult {
 // would falsely look vacuous.
 function literalsIn(at: string): string[] {
   const out = new Set<string>()
-  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|-?\d+(?:\.\d+)?/g)) out.add(m[0])
+  // double / single / simple-template strings (hasLiteral accepts backticks, so the probe must
+  // too) + numbers. `return ${m[0]}` is valid JS for each captured form.
+  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\$]|\\.)*`|-?\d+(?:\.\d+)?/g)) out.add(m[0])
   return [...out].slice(0, 8)
 }
 

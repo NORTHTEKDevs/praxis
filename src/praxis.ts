@@ -159,10 +159,19 @@ export class Praxis {
     // reinforce drives an O(N) retier -- so an unthrottled reinforce('success') flood is itself
     // a load-amplification DoS, not just the 'failure' path.
     if (!this.limiter.allow()) throw new RateLimitError('reinforce rate limit exceeded')
+    // resolve the composition so the anti-regression re-run sees its sub-skill impls; a COMPOSED
+    // skill would otherwise throw 'unknown sub-skill' and be false-quarantined on every failure
+    // report. If a dep is no longer verified, comp.ok is false -> pass {} -> the re-run fails ->
+    // quarantine, which is the CORRECT outcome for a now-broken composition.
+    let subImpls: Record<string, string> = {}
+    if (outcome === 'failure' && parseCalls(existing.implementation).length > 0) {
+      const comp = resolveComposition(this.store, existing.implementation, existing.capabilities, this.maxDepth)
+      if (comp.ok) subImpls = comp.subImpls
+    }
     // bound worker spawning: reinforce('failure') runs verifySkill (up to 2 workers). Share the
     // verify semaphore with remember() so concurrent reinforce calls cannot spawn unbounded
     // worker threads (DoS).
-    const r = (await this.sem.run(() => reinforce(this.store, id, outcome))) as Skill | undefined
+    const r = (await this.sem.run(() => reinforce(this.store, id, outcome, subImpls))) as Skill | undefined
     if (r && r.status !== 'verified') quarantineCascade(this.store, id)
     retier(this.store, this.hotCap)
     return r
