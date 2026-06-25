@@ -197,16 +197,26 @@ export class SkillStore {
   }
 
   private rowToSkill(r: any): Skill {
+    // Tolerate a corrupt JSON column (WAL crash, external edit, bit flip): degrade the SINGLE
+    // row to safe sentinels instead of throwing, which would otherwise deny EVERY bulk read
+    // (get/listByStatus/all/recall) for the whole library until the bad row is removed.
+    const parse = <T>(s: string, fallback: T): T => {
+      try {
+        return JSON.parse(s) as T
+      } catch {
+        return fallback
+      }
+    }
     return {
       id: r.id,
       name: r.name,
       interface: r.interface,
       implementation: r.implementation,
       acceptanceTest: r.acceptanceTest,
-      capabilities: JSON.parse(r.capabilities),
+      capabilities: parse<string[]>(r.capabilities, []),
       cost: r.cost,
-      provenance: JSON.parse(r.provenance),
-      embedding: JSON.parse(r.embedding),
+      provenance: parse(r.provenance, { task: '', model: '', parents: [], createdAt: 0, evidence: '' }),
+      embedding: parse<number[]>(r.embedding, []),
       embedderVersion: r.embedderVersion,
       utilityScore: r.utilityScore,
       status: r.status,

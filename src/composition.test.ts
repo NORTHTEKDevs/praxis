@@ -91,4 +91,32 @@ describe('resolveComposition', () => {
     assert.equal(r.ok, false)
     assert.match(r.reason ?? '', /cyclic/)
   })
+
+  const capStore = (impls: Record<string, { impl: string; caps: string[] }>) =>
+    ({
+      findVerifiedByName(name: string) {
+        const e = impls[name]
+        return e ? { id: name, name, implementation: e.impl, capabilities: e.caps } : undefined
+      },
+    }) as never
+
+  test('per-edge capability check blocks a low-cap intermediate laundering a high-cap descendant', () => {
+    // root R declares 'net', intermediate B does NOT -> B may not call C['net'] even though R can.
+    const store = capStore({
+      B: { impl: 'return call("C", input)', caps: [] },
+      C: { impl: 'return input', caps: ['net'] },
+    })
+    const r = resolveComposition(store, 'return call("B", input)', ['net'], 5)
+    assert.equal(r.ok, false)
+    assert.match(r.reason ?? '', /escalation/)
+  })
+
+  test('per-edge capability check allows a descendant cap when every ancestor declares it', () => {
+    const store = capStore({
+      B: { impl: 'return call("C", input)', caps: ['net'] },
+      C: { impl: 'return input', caps: ['net'] },
+    })
+    const r = resolveComposition(store, 'return call("B", input)', ['net'], 5)
+    assert.equal(r.ok, true)
+  })
 })

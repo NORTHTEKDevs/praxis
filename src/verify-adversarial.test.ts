@@ -76,6 +76,15 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'quarantined')
   })
 
+  test('an acceptance test that detects the probe stub by shape cannot dodge the vacuity check', async () => {
+    // detect a stub OBJECT via the old fixed marker and throw to force probe.ok=false, while the
+    // real oracle is vacuous (|| true). Marker-free randomized stubs make the detection inert.
+    const at =
+      'const r = run(0); if (r && typeof r === "object" && "__praxisStub" in r) throw new Error("x"); assert(run(0) === 999 || true)'
+    const res = await verifySkill(mk('return 0', at))
+    assert.notEqual(res.status, 'verified')
+  })
+
   test('acceptance test cannot forge a pass by trapping the outcome channel (defineProperty)', async () => {
     // install a forged getter + no-op setter on the outcome channel, then fail a REAL assert.
     // The outcome is read as the vm completion value (not a sandbox property), so the trap is

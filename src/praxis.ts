@@ -155,9 +155,10 @@ export class Praxis {
     if (!existing) throw new Error(`reinforce: no skill with id ${id}`)
     if (existing.kind === 'negative') throw new Error('reinforce: cannot reinforce a negative record')
     if (existing.status !== 'verified') throw new Error(`reinforce: skill is not verified (status: ${existing.status})`)
-    // the 'failure' path re-runs the sandbox (anti-regression). Rate-limit it like remember/
-    // recordFailure so a flood cannot drive unbounded verify load; 'success' is a cheap bump.
-    if (outcome === 'failure' && !this.limiter.allow()) throw new RateLimitError('reinforce rate limit exceeded')
+    // Rate-limit BOTH outcomes (shared limiter): 'failure' re-runs the sandbox, and EVERY
+    // reinforce drives an O(N) retier -- so an unthrottled reinforce('success') flood is itself
+    // a load-amplification DoS, not just the 'failure' path.
+    if (!this.limiter.allow()) throw new RateLimitError('reinforce rate limit exceeded')
     // bound worker spawning: reinforce('failure') runs verifySkill (up to 2 workers). Share the
     // verify semaphore with remember() so concurrent reinforce calls cannot spawn unbounded
     // worker threads (DoS).

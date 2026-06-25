@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { rmSync } from 'node:fs'
+import { DatabaseSync } from 'node:sqlite'
 import { SkillStore } from './store.ts'
 import type { Skill } from './skill.ts'
 
@@ -117,6 +118,35 @@ describe('SkillStore', () => {
     assert.equal(store.listVerifiedNegatives(2).length, 2)
     assert.equal(store.listVerifiedNegatives().length, 5)
     assert.ok(store.listVerifiedNegatives().every((s) => s.kind === 'negative'))
+  })
+
+  test('a corrupt JSON row degrades to sentinels instead of denying all reads', () => {
+    const base = join(tmpdir(), 'praxis-corrupt-test.db')
+    const clean = () => {
+      for (const f of [base, base + '-wal', base + '-shm', base + '-journal']) {
+        try {
+          rmSync(f)
+        } catch {}
+      }
+    }
+    clean()
+    const s1 = new SkillStore(base)
+    const good = s1.insert(mk({ name: 'good', status: 'verified', embedding: [0.1, 0.2] }))
+    const bad = s1.insert(mk({ name: 'bad', status: 'verified' }))
+    s1.close()
+    // corrupt the 'bad' row's embedding JSON out-of-band
+    const raw = new DatabaseSync(base)
+    raw.prepare('UPDATE skills SET embedding = ? WHERE id = ?').run('{not valid json', bad)
+    raw.close()
+    const s2 = new SkillStore(base)
+    const all = s2.all() // must NOT throw despite the corrupt row
+    const goodRow = s2.get(good)
+    const badRow = s2.get(bad)
+    s2.close()
+    clean()
+    assert.equal(all.length, 2)
+    assert.deepEqual(goodRow?.embedding, [0.1, 0.2]) // intact row unaffected
+    assert.deepEqual(badRow?.embedding, []) // corrupt JSON -> safe sentinel, not a throw
   })
 
   test('skills persist across reopen (named file)', () => {

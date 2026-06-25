@@ -1,4 +1,5 @@
 import { SkillStore } from './store.ts'
+import type { Skill } from './skill.ts'
 
 // Matches call('name'), call("name"), or call(`name`) at the current scan position.
 const CALL_AT = /^call\s*\(\s*(['"`])([^'"`]+)\1/
@@ -82,27 +83,36 @@ export function resolveComposition(
   // once per path. Without this, traversal is exponential in paths (k^maxDepth SQL lookups +
   // parseCalls scans) -- a DoS reachable through run_skill on a legitimately verified library.
   const resolved = new Set<string>()
+  const cache = new Map<string, Skill | undefined>() // memoize lookups so dedup never re-hits SQL
+  const lookup = (name: string): Skill | undefined => {
+    if (!cache.has(name)) cache.set(name, store.findVerifiedByName(name))
+    return cache.get(name)
+  }
 
-  const visit = (code: string, seen: string[], depth: number): string | null => {
+  // `caps` is the IMMEDIATE parent's capabilities at each edge. The escalation check is PER-EDGE
+  // (a skill's direct children may not require a capability the skill itself does not declare),
+  // so a low-capability intermediate cannot transitively launder a higher-capability descendant.
+  const visit = (code: string, seen: string[], depth: number, caps: string[]): string | null => {
     if (depth > maxDepth) return 'max composition depth exceeded'
     for (const name of parseCalls(code)) {
       if (seen.includes(name)) return `cyclic dependency: ${[...seen, name].join(' -> ')}` // cycle check FIRST
-      if (resolved.has(name)) continue // already resolved via another path; its subtree is identical
-      resolved.add(name)
-      const sub = store.findVerifiedByName(name)
+      const sub = lookup(name)
       if (!sub) return `unknown or unverified sub-skill: ${name}`
       for (const cap of sub.capabilities) {
-        if (!parentCaps.includes(cap)) return `capability escalation: sub-skill '${name}' requires '${cap}'`
+        // checked at EVERY edge, even for a subtree already resolved via another path
+        if (!caps.includes(cap)) return `capability escalation: sub-skill '${name}' requires '${cap}'`
       }
+      if (resolved.has(name)) continue // subtree already traversed; identical -> skip the recursion
+      resolved.add(name)
       subImpls[name] = sub.implementation
       if (!deps.includes(sub.id)) deps.push(sub.id)
-      const err = visit(sub.implementation, [...seen, name], depth + 1)
+      const err = visit(sub.implementation, [...seen, name], depth + 1, sub.capabilities)
       if (err) return err
     }
     return null
   }
 
-  const reason = visit(impl, [], 1)
+  const reason = visit(impl, [], 1, parentCaps)
   if (reason) return { ok: false, subImpls: {}, deps: [], reason }
   return { ok: true, subImpls, deps }
 }

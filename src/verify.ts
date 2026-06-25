@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { runAcceptance } from './sandbox.ts'
 import { computeCheckStrength } from './strength.ts'
 import type { SkillStatus } from './skill.ts'
@@ -32,13 +33,18 @@ export async function verifySkill(
   const sopts = { timeoutMs: opts.timeoutMs ?? 2000, subImpls: opts.subImpls, maxDepth: opts.maxDepth }
   const r = await runAcceptance(skill.implementation, skill.acceptanceTest, sopts)
   if (r.ok) {
-    // Counter-example probe: re-run the acceptance test against a STUB implementation that
-    // ignores the input. If it ALSO passes, the test does not actually exercise the
-    // implementation (a vacuous/tautological oracle, e.g. `assert(run(x) === 6 || true)`),
-    // so it must NOT verify. This catches the short-circuit-bypass class that a purely
+    // Counter-example probe: re-run the acceptance test against STUB implementations that ignore
+    // the input. If a stub ALSO passes, the test does not exercise the implementation (a vacuous/
+    // tautological oracle, e.g. `assert(run(x) === 6 || true)`), so it must NOT verify. The stub
+    // returns an UNPREDICTABLE, marker-free value and we try TWO of them: a crafted test cannot
+    // detect-and-dodge an unknown stub (e.g. by sniffing a fixed `__praxisStub` marker) while
+    // still being a real oracle for both. This catches the short-circuit-bypass class a purely
     // syntactic strength check cannot.
-    const probe = await runAcceptance('return ({ __praxisStub: true })', skill.acceptanceTest, sopts)
-    if (probe.ok) return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous)' }
+    const stubPasses = async (val: string) =>
+      (await runAcceptance(`return ${JSON.stringify(val)}`, skill.acceptanceTest, sopts)).ok
+    if ((await stubPasses(randomUUID())) || (await stubPasses(randomUUID()))) {
+      return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous)' }
+    }
     return { status: 'verified' }
   }
   if (r.category === 'assertion') return { status: 'refuted', reason: r.error }

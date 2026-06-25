@@ -123,6 +123,13 @@ describe('Praxis integration', () => {
     await assert.rejects(px.reinforce(r.id, 'bogus' as never), /outcome must be/)
   })
 
+  test('reinforce(success) is rate-limited too (not just failure)', async () => {
+    const p = new Praxis(undefined, undefined, { rememberPerMin: 2 })
+    const r = await p.remember(valid('rl', 'return input * 2', 'assert(run(3) === 6)')) // token 1
+    await p.reinforce(r.id, 'success') // token 2
+    await assert.rejects(p.reinforce(r.id, 'success'), RateLimitError) // token 3 -> throttled
+  })
+
   test('concurrent remember of identical skills does not duplicate (write-lock)', async () => {
     await Promise.all([
       px.remember(valid('dup', 'return input * 2', 'assert(run(3) === 6)')),
