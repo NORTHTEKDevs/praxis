@@ -13,6 +13,16 @@ export interface VerifyResult {
   reason?: string
 }
 
+// String/number literals appearing in an acceptance test, as stub return expressions. An
+// INEQUALITY oracle (run !== <literal>) is only rejected by a stub that actually returns that
+// literal, so the probe must try the test's own literals -- a random value satisfies `!==` and
+// would falsely look vacuous.
+function literalsIn(at: string): string[] {
+  const out = new Set<string>()
+  for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|-?\d+(?:\.\d+)?/g)) out.add(m[0])
+  return [...out].slice(0, 8)
+}
+
 // Verify-before-keep (fail-closed). A skill becomes `verified` ONLY when its acceptance
 // test actually executed and passed in the isolated worker. Degrades safely otherwise:
 //   - no acceptance test            -> quarantined
@@ -33,19 +43,38 @@ export async function verifySkill(
   const sopts = { timeoutMs: opts.timeoutMs ?? 2000, subImpls: opts.subImpls, maxDepth: opts.maxDepth }
   const r = await runAcceptance(skill.implementation, skill.acceptanceTest, sopts)
   if (r.ok) {
-    // Counter-example probe: re-run the acceptance test against STUB implementations that ignore
-    // the input and return an UNPREDICTABLE, marker-free value. The skill is vacuous UNLESS every
-    // stub is cleanly REJECTED BY AN ASSERTION (the oracle catching the wrong value). A stub that
-    // PASSES means the oracle ignores the implementation; a stub that fails by a NON-assertion
-    // error (runtime/timeout/memory/async, or no assertion ran at all) means the test detected and
-    // EVADED the probe -- e.g. it sniffed the stub's type and crashed instead of asserting. Both
-    // are inconclusive, so fail-closed -> quarantine. Two independent random stubs also defeat
-    // value-guessing and the fixed-marker sniff a single fixed stub allowed.
-    const cleanlyRejected = async (val: string) => {
-      const p = await runAcceptance(`return ${JSON.stringify(val)}`, skill.acceptanceTest, sopts)
-      return !p.ok && p.category === 'assertion'
+    // Counter-example probe: the oracle is NON-vacuous iff it REJECTS (via an assertion failure)
+    // at least one WRONG output. For an equality oracle (run === V) a random value is wrong; for an
+    // INEQUALITY oracle (run !== V) the wrong output is V itself -- so a single random stub is not
+    // enough (a UUID trivially satisfies `!== null`, falsely flagging the test vacuous). Try a
+    // DIVERSE stub set: marker-free random values (defeats sniff/guess) + common sentinels + the
+    // literals appearing in the test. The skill verifies iff SOME stub is cleanly assertion-
+    // rejected. A stub that PASSES proves nothing; a stub that crashes NON-assertion (probe
+    // evasion or incidental) is inconclusive. If NO stub is cleanly rejected (all pass or all
+    // crash), the test is vacuous or evading -> quarantine (fail-closed). Short-circuits on the
+    // first clean rejection (usually the first stub).
+    const stubVals = [
+      JSON.stringify(randomUUID()),
+      JSON.stringify(randomUUID()),
+      'null',
+      'undefined',
+      '0',
+      '""',
+      'false',
+      'NaN',
+      '[]',
+      '({})',
+      ...literalsIn(skill.acceptanceTest),
+    ]
+    let rejected = false
+    for (const v of stubVals) {
+      const p = await runAcceptance(`return ${v}`, skill.acceptanceTest, sopts)
+      if (!p.ok && p.category === 'assertion') {
+        rejected = true
+        break
+      }
     }
-    if (!(await cleanlyRejected(randomUUID())) || !(await cleanlyRejected(randomUUID()))) {
+    if (!rejected) {
       return { status: 'quarantined', reason: 'acceptance test does not exercise the implementation (vacuous or probe-evading)' }
     }
     return { status: 'verified' }

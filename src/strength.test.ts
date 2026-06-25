@@ -38,4 +38,8 @@ describe('computeCheckStrength', () => {
   test('a different identifier ending in run( does not count as run()', () => {
     assert.equal(computeCheckStrength('assert(myrun(3) === 6)'), 0)
   })
+
+  test('run(...) vs undefined is a concrete oracle (scores 1)', () => {
+    assert.equal(computeCheckStrength('assert(run(3) === undefined)'), 1)
+  })
 })

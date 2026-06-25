@@ -76,6 +76,18 @@ describe('verify gate adversarial suite', () => {
     assert.equal(r.status, 'quarantined')
   })
 
+  test('an inequality oracle (run !== literal) verifies (probe tries the forbidden value)', async () => {
+    // a UUID stub satisfies `!== null`, so a single random stub would falsely quarantine this; the
+    // diverse stub set includes `null`, whose `null !== null` assertion failure proves non-vacuity.
+    const r = await verifySkill(mk('return input + 1', 'assert(run(3) !== null)'))
+    assert.equal(r.status, 'verified')
+  })
+
+  test('a vacuous inequality oracle (run !== x || true) is still quarantined', async () => {
+    const r = await verifySkill(mk('return input', 'assert(run(3) !== null || true)'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('an acceptance test that crashes the probe stub instead of asserting does not verify', async () => {
     // detect the string-typed stub and throw a runtime error so the stub exits NON-assertion;
     // the real oracle (|| true) is vacuous. Requiring a clean ASSERTION rejection catches this.

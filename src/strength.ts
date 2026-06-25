@@ -21,7 +21,7 @@ export function computeCheckStrength(acceptanceTest: string): number {
     // skill permanently quarantined). `run(` must be preceded by start-or-non-identifier so
     // `myrun(x)` does not match.
     const isRun = (s: string) => /(?:^|[^\w$])run\s*\(/.test(s)
-    const hasLiteral = (s: string) => /(["'`])|(?:^|[^\w.])-?\d|\btrue\b|\bfalse\b|\bnull\b|\[|\{/.test(s)
+    const hasLiteral = (s: string) => /(["'`])|(?:^|[^\w.])-?\d|\btrue\b|\bfalse\b|\bnull\b|\bundefined\b|\[|\{/.test(s)
     // a real oracle compares run(...) against a CONCRETE literal. literal-vs-literal
     // (assert("a" === "a")) and run-vs-run (self-referential) score 0: the implementation
     // is never exercised, so they must NOT pass the verify gate.
