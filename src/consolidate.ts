@@ -171,14 +171,24 @@ export async function consolidate(
         const k = archivedKeeper.get(id)
         return !k || store.get(k)?.status === 'verified'
       })
-      // Stage 2 (cross-cluster) -- one cluster's archival can cascade-quarantine ANOTHER
-      // cluster's keeper (when that keeper depends, by id, on the first cluster's archived
-      // sibling). Archiving the second cluster's siblings would then leave its use case with a
-      // quarantined replacement. Compute the cascade-affected keepers WITHOUT mutating and drop
-      // any survivor whose keeper appears there; iterate to a fixpoint (dropping survivors only
-      // shrinks the affected set, so this converges).
+      // The cold-eviction loop below runs in the SAME pass and cascade-quarantines (no protect)
+      // the dependents of every evicted skill. A merge keeper that depends on a soon-to-be-evicted
+      // cold skill would be quarantined AFTER its siblings are archived here -> same use-case loss.
+      // Fold those eviction starts into the cascade simulation. (Exclude merge candidates -- those
+      // are archived by the merge path, not evicted.)
+      const toArchiveSet = new Set(toArchive)
+      const evictStarts = store
+        .listByTier('cold')
+        .filter((s) => s.status === 'verified' && !s.pinned && s.utilityScore < evictT && !toArchiveSet.has(s.id))
+        .map((s) => s.id)
+      // Stage 2 (cross-cluster + eviction) -- one cluster's archival OR a cold eviction can
+      // cascade-quarantine ANOTHER cluster's keeper (when that keeper depends, by id, on the
+      // archived/evicted skill). Archiving the second cluster's siblings would then leave its use
+      // case with a quarantined replacement. Compute the cascade-affected keepers WITHOUT mutating
+      // and drop any survivor whose keeper appears there; iterate to a fixpoint (dropping survivors
+      // only shrinks the affected set, so this converges).
       for (;;) {
-        const affected = cascadeAffectedKeepers(store, survivors, archivedKeeper)
+        const affected = cascadeAffectedKeepers(store, [...survivors, ...evictStarts], archivedKeeper)
         const next = survivors.filter((id) => {
           const k = archivedKeeper.get(id)
           return !k || !affected.has(k)

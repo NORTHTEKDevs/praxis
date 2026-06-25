@@ -168,6 +168,21 @@ describe('consolidate + reindex', () => {
     assert.equal(r.merged, 0) // the aborted fold is not counted as a merge
   })
 
+  test('cold eviction of a sub-skill aborts a merge fold whose keeper depends on it', async () => {
+    // 'dep' is cold + zero-utility -> will be evicted, cascade-quarantining anything depending on
+    // it. Cluster A's keeper depends on 'dep'. A's fold must be aborted so A's siblings are not
+    // archived while their replacement (the keeper) is eviction-cascade-quarantined.
+    const dep = await addVerified(store, { name: 'dep', iface: '(d)->d', impl: 'return input', test: 'assert(run("a") === "a")', tier: 'cold', utility: 0 })
+    const aKeeper = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 10 })
+    const aS1 = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 5 })
+    await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input', test: 'assert(run("a") === "a")', utility: 0 })
+    store.addDep(aKeeper, dep)
+    await consolidate(store, embedder)
+    assert.equal(store.get(dep)?.status, 'archived') // cold-evicted
+    assert.equal(store.get(aKeeper)?.status, 'quarantined') // eviction cascade
+    assert.equal(store.get(aS1)?.status, 'verified') // fold aborted -> sibling preserved, not archived
+  })
+
   test('cross-cluster: a fold is aborted when its keeper would be cascade-quarantined by another cluster', async () => {
     // cluster A (alpha) folds; B's keeper depends (by id) on an alpha sibling that gets archived,
     // so B's keeper will be cascade-quarantined -> B's siblings must NOT be archived (else B's use
