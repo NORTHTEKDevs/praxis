@@ -122,6 +122,13 @@ describe('Praxis integration', () => {
     await assert.rejects(p.recordFailure({ task: 'x2', approach: 'y2', reason: 'z2' }), RateLimitError)
   })
 
+  test('remember rejects a composed skill that escalates capabilities (integration)', async () => {
+    // 'net-dep' declares capability 'net'; a composer that does NOT declare 'net' may not use it.
+    await px.remember({ ...valid('net-dep', 'return input', 'assert(run(1) === 1)'), capabilities: ['net'] } as never)
+    const r = await px.remember(valid('escalate', 'return call("net-dep", input)', 'assert(run(1) === 1)'))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('remember ignores an injected kind:negative (coerced to positive)', async () => {
     const r = await px.remember({ ...valid('inj', 'return 1', 'assert(run(1) === 1)'), kind: 'negative' } as never)
     assert.equal(px.store.get(r.id)?.kind, 'positive')

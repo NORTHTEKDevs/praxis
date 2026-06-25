@@ -30,4 +30,21 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   return wrapTool(() => tool.handler((req.params.arguments ?? {}) as Record<string, unknown>))
 })
 
-await server.connect(new StdioServerTransport())
+// Flush the SQLite handle (WAL checkpoint) on a clean shutdown so the DB is left tidy.
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    try {
+      px.store.close()
+    } catch {
+      /* best-effort */
+    }
+    process.exit(0)
+  })
+}
+
+try {
+  await server.connect(new StdioServerTransport())
+} catch (e) {
+  process.stderr.write(`praxis: failed to start MCP server: ${(e instanceof Error ? e.message : String(e))}\n`)
+  process.exit(1)
+}

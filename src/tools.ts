@@ -52,7 +52,7 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'recall_skills',
       description: 'Retrieve the top-k verified skills for a query, plus known failure modes (negatives) to check before retrying.',
-      inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string', description: 'task description', maxLength: 2000 }, k: { type: 'number', minimum: 1, maximum: 50 }, tokenBudget: { type: 'number', minimum: 0 }, maxNegatives: { type: 'number', minimum: 0, maximum: 20, description: 'max known-failure modes to return (default 1)' } } },
+      inputSchema: { type: 'object', required: ['query'], properties: { query: { type: 'string', description: 'task description', maxLength: 2000 }, k: { type: 'number', minimum: 1, maximum: 50 }, tokenBudget: { type: 'number', minimum: 0 }, maxNegatives: { type: 'number', minimum: 0, maximum: 20, description: 'max known-failure modes to return (default 1)' } }, additionalProperties: false },
       handler: async (a) => {
         const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
         const k = Math.max(1, Math.min(num(a.k, 5), 50))
@@ -65,7 +65,7 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'run_skill',
       description: 'Execute a verified skill (composing verified sub-skills if its code calls them) on an input.',
-      inputSchema: { type: 'object', required: ['id', 'input'], properties: { id: str('skill id'), input: { description: 'the input value' } } },
+      inputSchema: { type: 'object', required: ['id', 'input'], properties: { id: str('skill id'), input: { description: 'the input value' } }, additionalProperties: false },
       handler: (a) => {
         let sz = 0
         try {
@@ -80,25 +80,25 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'record_failure',
       description: 'Record a known failure mode as a first-class negative skill, surfaced before similar retries.',
-      inputSchema: { type: 'object', required: ['task', 'approach', 'reason'], properties: { task: { type: 'string', description: 'the task', maxLength: 2000 }, approach: { type: 'string', description: 'what was tried', maxLength: 2000 }, reason: { type: 'string', description: 'why it failed', maxLength: 2000 } } },
+      inputSchema: { type: 'object', required: ['task', 'approach', 'reason'], properties: { task: { type: 'string', description: 'the task', maxLength: 2000 }, approach: { type: 'string', description: 'what was tried', maxLength: 2000 }, reason: { type: 'string', description: 'why it failed', maxLength: 2000 } }, additionalProperties: false },
       handler: (a) => px.recordFailure(a as never),
     },
     {
       name: 'reinforce',
       description: "Record a usage outcome. 'failure' re-runs the acceptance test; a now-broken skill is quarantined.",
-      inputSchema: { type: 'object', required: ['id', 'outcome'], properties: { id: str('skill id'), outcome: { type: 'string', enum: ['success', 'failure'] } } },
+      inputSchema: { type: 'object', required: ['id', 'outcome'], properties: { id: str('skill id'), outcome: { type: 'string', enum: ['success', 'failure'] } }, additionalProperties: false },
       handler: (a) => px.reinforce(String(a.id), a.outcome as 'success' | 'failure'),
     },
     {
       name: 'library_stats',
       description: 'Library health: total/verified/quarantined/negatives, tier counts, weak-test count, top skills.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       handler: async () => px.stats(),
     },
     {
       name: 'pin_skill',
       description: 'Pin a skill so it is never evicted or demoted by tiering.',
-      inputSchema: { type: 'object', required: ['id'], properties: { id: str('skill id'), pinned: { type: 'boolean' } } },
+      inputSchema: { type: 'object', required: ['id'], properties: { id: str('skill id'), pinned: { type: 'boolean' } }, additionalProperties: false },
       handler: async (a) => {
         px.pin(String(a.id), a.pinned !== false)
         return { ok: true }
@@ -107,7 +107,7 @@ export function buildTools(px: Praxis): ToolDef[] {
     {
       name: 'consolidate_now',
       description: 'Run a consolidation pass: regression-safe dedup-merge + cold eviction.',
-      inputSchema: { type: 'object', properties: { dryRun: { type: 'boolean' } } },
+      inputSchema: { type: 'object', properties: { dryRun: { type: 'boolean' } }, additionalProperties: false },
       handler: (a) => consolidate(px.store, px.embedder, { dryRun: a.dryRun as boolean, hotCap: px.hotCap, sem: px.sem }),
     },
   ]

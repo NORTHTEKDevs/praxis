@@ -23,7 +23,7 @@ function literalsIn(at: string): string[] {
   // INTERPOLATED templates (${...}) -- their runtime value is not a static literal.
   // `return ${m[0]}` is valid JS for each captured form.
   for (const m of at.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|0[xX][0-9a-fA-F]+|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g)) {
-    if (m[0][0] === '`' && m[0].includes('${')) continue
+    if (m[0][0] === '`' && /(?<!\\)\$\{/.test(m[0])) continue // skip only UNescaped ${...} interpolation
     out.add(m[0])
   }
   // cap to bound worker spawning on a pathological many-literal test, but generous enough that a

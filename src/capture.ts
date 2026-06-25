@@ -27,10 +27,11 @@ export function captureSkill(input: CaptureInput): Skill {
   // bound field lengths so a misbehaving caller cannot write unbounded data.
   const TEXT = 2000
   const CODE = 50_000
+  const acceptanceTest = (input.acceptanceTest ?? '').slice(0, CODE)
   const provenance: Provenance = {
     task: (input.task ?? '').slice(0, TEXT),
     model: (input.model ?? 'unknown').slice(0, 200),
-    parents: input.parents ?? [],
+    parents: (input.parents ?? []).slice(0, 64).map((p) => String(p).slice(0, 200)),
     createdAt: input.createdAt ?? Date.now(),
     evidence: (input.evidence ?? '').slice(0, TEXT),
   }
@@ -40,7 +41,7 @@ export function captureSkill(input: CaptureInput): Skill {
     name: input.name.trim().slice(0, 200),
     interface: (input.interface ?? '').slice(0, TEXT),
     implementation: input.implementation.slice(0, CODE),
-    acceptanceTest: (input.acceptanceTest ?? '').slice(0, CODE),
+    acceptanceTest,
     capabilities: (input.capabilities ?? []).slice(0, 64).map((c) => String(c).slice(0, 200)),
     cost: input.cost ?? 'normal',
     provenance,
@@ -54,6 +55,7 @@ export function captureSkill(input: CaptureInput): Skill {
     uses: 0,
     successRate: 1,
     pinned: false,
-    checkStrength: computeCheckStrength(input.acceptanceTest ?? ''),
+    // computed from the STORED (truncated) test so stats() can't disagree with what verify re-reads
+    checkStrength: computeCheckStrength(acceptanceTest),
   }
 }

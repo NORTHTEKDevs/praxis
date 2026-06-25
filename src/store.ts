@@ -51,6 +51,11 @@ export class SkillStore {
         retrieved_at INTEGER NOT NULL,
         PRIMARY KEY (skill_id, task)
       );
+      -- hot read paths: listByStatus / listVerifiedHot / listVerifiedNegatives (status,kind,tier),
+      -- findVerifiedByName (name), and dependentsOf (dep_id -- not covered by the deps PK prefix).
+      CREATE INDEX IF NOT EXISTS idx_skills_status_kind_tier ON skills(status, kind, tier);
+      CREATE INDEX IF NOT EXISTS idx_skills_name ON skills(name);
+      CREATE INDEX IF NOT EXISTS idx_skill_deps_dep ON skill_deps(dep_id);
     `)
     const row = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as
       | { version: number }

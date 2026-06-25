@@ -78,4 +78,41 @@ describe('MCP tools', () => {
     const r = (await byName(px, 'recall_skills').handler({ query: 'double a number', k: Number.NaN })) as { skills: unknown[] }
     assert.ok(r.skills.length >= 1)
   })
+
+  test('run_skill rejects an oversized input via the size guard', async () => {
+    const px = new Praxis()
+    const r = await wrapTool(() => byName(px, 'run_skill').handler({ id: 'x', input: 'a'.repeat(100_001) }))
+    assert.equal(r.isError, true)
+    assert.match(r.content[0].text, /too large/)
+  })
+
+  test('record_failure handler stores a negative surfaced on recall', async () => {
+    const px = new Praxis()
+    await byName(px, 'record_failure').handler({ task: 'parse nested json', approach: 'regex', reason: 'fails past depth 2' })
+    const r = (await byName(px, 'recall_skills').handler({ query: 'parse nested json' })) as { negatives: unknown[] }
+    assert.ok(r.negatives.length >= 1)
+  })
+
+  test('wrapTool stringifies a non-Error throw into the envelope', async () => {
+    const r = await wrapTool(async () => {
+      throw 'plain string failure'
+    })
+    assert.equal(r.isError, true)
+    assert.match(r.content[0].text, /plain string failure/)
+  })
+
+  test('pin_skill handler can unpin (pinned:false)', async () => {
+    const px = new Praxis()
+    const rem = (await byName(px, 'remember_skill').handler({ name: 'double', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double' })) as { id: string }
+    await byName(px, 'pin_skill').handler({ id: rem.id })
+    await byName(px, 'pin_skill').handler({ id: rem.id, pinned: false })
+    assert.equal(px.store.get(rem.id)?.pinned, false)
+  })
+
+  test('recall_skills clamps a negative tokenBudget', async () => {
+    const px = new Praxis()
+    await byName(px, 'remember_skill').handler({ name: 'd', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double a number' })
+    const r = (await byName(px, 'recall_skills').handler({ query: 'double a number', tokenBudget: -1 })) as { skills: unknown[] }
+    assert.ok(r.skills.length >= 1)
+  })
 })

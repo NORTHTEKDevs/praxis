@@ -43,7 +43,9 @@ describe('computeCheckStrength', () => {
     assert.equal(computeCheckStrength('assert(run(3) === undefined)'), 1)
   })
 
-  test('run(...) vs Infinity / NaN are concrete oracles (score 1)', () => {
+  test('checkStrength recognizes Infinity / NaN as concrete literals (heuristic pre-filter only)', () => {
+    // strength is a syntactic pre-filter; it just clears these to reach the probe. (run !== NaN is
+    // itself vacuous and the counter-example probe quarantines it at verify time -- not strength's job.)
     assert.equal(computeCheckStrength('assert(run(1) === Infinity)'), 1)
     assert.equal(computeCheckStrength('assert(run(1) !== NaN)'), 1)
   })
