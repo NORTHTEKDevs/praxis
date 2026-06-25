@@ -155,6 +155,18 @@ describe('consolidate + reindex', () => {
     assert.equal(store.get(k)?.status, 'verified')
   })
 
+  test('a keeper demoted DURING the async verify window aborts the fold (siblings preserved)', async () => {
+    const keeper = await addVerified(store, { name: 'm', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 10 })
+    const sib = await addVerified(store, { name: 'm', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 5 })
+    await addVerified(store, { name: 'm', impl: 'return input + "!"', test: 'assert(run("a") === "a!")', utility: 0 })
+    // consolidate parks on its first verifySkill await; demote the keeper during that window
+    // (a concurrent reinforce(keeper,'failure') analogue, which does not take the lock).
+    const p = consolidate(store, embedder)
+    store.updateStatus(keeper, 'quarantined')
+    await p
+    assert.equal(store.get(sib)?.status, 'verified') // fold aborted -> sibling not archived
+  })
+
   test('cross-cluster: a keeper depending on ANOTHER cluster\'s folded skill IS cascade-quarantined', async () => {
     // two independent clusters (distinct interfaces -> never merged together)
     const a = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input + 1', test: 'assert(run(1) === 2)', utility: 10 })
