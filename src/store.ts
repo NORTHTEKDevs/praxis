@@ -104,8 +104,13 @@ export class SkillStore {
     return rows.map((r) => this.rowToSkill(r))
   }
 
-  listVerifiedNegatives(): Skill[] {
-    const rows = this.db.prepare("SELECT * FROM skills WHERE status = 'verified' AND kind = 'negative'").all()
+  // Bounded by default: negatives have no eviction path, so an unbounded scan would grow O(N)
+  // forever. Cap to the most-recent `limit` rows (rowid ascends with insertion) so recall's
+  // negative pass stays O(cap), not O(all-negatives-ever-recorded).
+  listVerifiedNegatives(limit = 200): Skill[] {
+    const rows = this.db
+      .prepare("SELECT * FROM skills WHERE status = 'verified' AND kind = 'negative' ORDER BY rowid DESC LIMIT ?")
+      .all(limit)
     return rows.map((r) => this.rowToSkill(r))
   }
 

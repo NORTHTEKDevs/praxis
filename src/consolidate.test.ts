@@ -16,15 +16,17 @@ interface DupOpts {
   utility?: number
   pinned?: boolean
   embedderVersion?: string
+  iface?: string
+  task?: string
 }
 
 async function addVerified(store: SkillStore, o: DupOpts = {}): Promise<string> {
   const s = captureSkill({
     name: o.name ?? 'reverse',
-    interface: '(s)->s',
+    interface: o.iface ?? '(s)->s',
     implementation: o.impl ?? 'return input.split("").reverse().join("")',
     acceptanceTest: o.test ?? 'assert(run("ab") === "ba")',
-    task: 'reverse a string',
+    task: o.task ?? 'reverse a string',
   })
   s.embedding = await embedder.embed(`${s.name} ${s.interface} ${s.provenance.task}`)
   s.status = 'verified'
@@ -151,5 +153,19 @@ describe('consolidate + reindex', () => {
     store.addDep(k, s1) // keeper depends (by id) on a sibling that will be folded
     await consolidate(store, embedder)
     assert.equal(store.get(k)?.status, 'verified')
+  })
+
+  test('cross-cluster: a keeper depending on ANOTHER cluster\'s folded skill IS cascade-quarantined', async () => {
+    // two independent clusters (distinct interfaces -> never merged together)
+    const a = await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input + 1', test: 'assert(run(1) === 2)', utility: 10 })
+    await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input + 1', test: 'assert(run(1) === 2)', utility: 5 })
+    await addVerified(store, { name: 'alpha', iface: '(a)->a', impl: 'return input + 1', test: 'assert(run(1) === 2)', utility: 0 })
+    await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + 2', test: 'assert(run(1) === 3)', utility: 10 })
+    const b = await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + 2', test: 'assert(run(1) === 3)', utility: 5 })
+    await addVerified(store, { name: 'beta', iface: '(b)->b', impl: 'return input + 2', test: 'assert(run(1) === 3)', utility: 0 })
+    store.addDep(a, b) // alpha keeper depends on a beta sibling that gets folded/archived
+    await consolidate(store, embedder)
+    assert.equal(store.get(b)?.status, 'archived')
+    assert.equal(store.get(a)?.status, 'quarantined') // per-cluster protect does NOT shield it
   })
 })

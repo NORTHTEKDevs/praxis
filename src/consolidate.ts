@@ -71,10 +71,14 @@ export async function consolidate(
     const verified = store.listByStatus('verified').filter((s) => s.kind === 'positive' && s.embedding.length > 0)
     const used = new Set<string>()
     const toArchive: string[] = []
-    const keeperIds = new Set<string>()
+    const archivedKeeper = new Map<string, string>() // archivedId -> its OWN cluster's keeper id
+    let scanned = 0
 
     for (const a of verified) {
       if (used.has(a.id)) continue
+      // yield periodically so the O(N^2) cosine pair-scan (reachable via the consolidate_now MCP
+      // tool) cannot block the event loop for an extended synchronous burst at scale.
+      if (++scanned % 128 === 0) await new Promise((r) => setImmediate(r))
       const cluster = [a]
       for (const b of verified) {
         if (b.id === a.id || used.has(b.id)) continue
@@ -118,8 +122,10 @@ export async function consolidate(
         continue
       }
       if (!dryRun) {
-        for (const o of others) toArchive.push(o.id)
-        keeperIds.add(keeper.id)
+        for (const o of others) {
+          toArchive.push(o.id)
+          archivedKeeper.set(o.id, keeper.id)
+        }
       }
       merged += others.length
     }
@@ -129,9 +135,14 @@ export async function consolidate(
     // composed skill that depended (by id) on a now-archived skill.
     if (!dryRun) {
       for (const id of toArchive) store.updateStatus(id, 'archived')
-      // protect keepers: a keeper that wraps + near-duplicates a folded sibling must not be
-      // cascade-quarantined by its own merge.
-      for (const id of toArchive) quarantineCascade(store, id, 'sub-skill invalidated', keeperIds)
+      // Cascade-quarantine composed dependents of each archived skill, protecting ONLY that
+      // skill's own cluster keeper (a keeper that wraps a folded sibling must survive its own
+      // fold). A GLOBAL keeper protect-set would wrongly shield a keeper from an unrelated
+      // cluster's legitimate cascade -- the cross-cluster stale-verified regression.
+      for (const id of toArchive) {
+        const k = archivedKeeper.get(id)
+        quarantineCascade(store, id, 'sub-skill invalidated', k ? new Set([k]) : undefined)
+      }
     }
 
     for (const s of store.listByTier('cold')) {

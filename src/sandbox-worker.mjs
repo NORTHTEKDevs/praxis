@@ -6,8 +6,10 @@
 // Trust design:
 //  - The assertion bookkeeping (assert count + failures) lives inside an IIFE closure, NOT on
 //    the sandbox object, so a crafted acceptance test cannot zero it to spoof a pass. The IIFE
-//    returns the authoritative outcome and assigns it AFTER user code runs, so the skill cannot
-//    overwrite it either. (No host function is injected into the context -> no extra escape.)
+//    is the entire script, so its authoritative outcome is read back as the vm COMPLETION VALUE
+//    (vm.runInNewContext's return), NOT through a sandbox property -- so a test cannot redefine
+//    an outcome channel with a no-op setter to forge a clean result. (No host function is
+//    injected into the context -> no extra escape.)
 //  - run() rejects async implementations (a pending Promise would pass a truthiness check).
 //  - implementation/acceptance test are built with `new Function` inside the context, so they
 //    run in the context global scope and cannot reach the worker module scope.
@@ -26,11 +28,10 @@ const sandbox = {
   __accept: acceptanceTest ?? '',
   __input: input,
   __mode: mode,
-  __outcome: undefined,
 }
 
 const code = `
-__outcome = (() => {
+;(() => {
   // Capture the control structures into closure consts and DELETE them from the vm global so
   // skill code (which runs in the global scope via new Function) cannot mutate __subs to inject
   // an unverified sub-skill body, nor lift __maxDepth.
@@ -80,8 +81,11 @@ __outcome = (() => {
 `
 
 let posted = false
+let outcome
 try {
-  vm.runInNewContext(code, sandbox, { timeout: timeoutMs })
+  // The outcome is the script's completion value (the IIFE's return), read directly from the
+  // host -- never via a sandbox property the in-context code could trap.
+  outcome = vm.runInNewContext(code, sandbox, { timeout: timeoutMs })
 } catch (e) {
   // vm-level failure: timeout interrupt, or a syntax error in the generated code.
   const msg = String((e && e.message) || e)
@@ -91,7 +95,7 @@ try {
 }
 
 if (!posted) {
-  const o = sandbox.__outcome || { ac: 0, af: [], threw: true, errorMessage: 'no outcome', errorName: null }
+  const o = outcome || { ac: 0, af: [], threw: true, errorMessage: 'no outcome', errorName: null }
   const classify = () => {
     const m = o.errorMessage || ''
     if (o.errorName === 'AsyncError' || /ASYNC_SKILL/.test(m)) return 'async'

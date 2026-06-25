@@ -138,6 +138,17 @@ describe('Praxis integration', () => {
     const broken = px.store.all().filter((s) => s.name === 'broken')
     assert.equal(broken.length, 1)
   })
+
+  test('TOCTOU: a sub-skill demoted while a composite is mid-verify quarantines the composite at commit', async () => {
+    await px.remember(valid('leaf', 'return input * 2', 'assert(run(3) === 6)'))
+    const leaf = px.store.listByStatus('verified').find((s) => s.name === 'leaf')!
+    // start remember; it resolves composition (leaf verified) synchronously, then parks on the
+    // verify worker. Demote leaf during that await -> commit-time re-check must quarantine wrap.
+    const p = px.remember(valid('wrap', 'return call("leaf", input) + 1', 'assert(run(3) === 7)'))
+    px.store.updateStatus(leaf.id, 'quarantined')
+    const r = await p
+    assert.notEqual(r.status, 'verified')
+  })
 })
 
 describe('RateLimiter', () => {

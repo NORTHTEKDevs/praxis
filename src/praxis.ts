@@ -113,7 +113,21 @@ export class Praxis {
         // deps were parsed from the CANDIDATE's impl; register them only when the candidate is
         // what we stored (inserted). On reinforced/duplicate, d.id is a DIFFERENT existing skill
         // that keeps its own deps - writing the candidate's deps onto it would be wrong.
-        if (d.action === 'inserted') for (const dep of deps) this.store.addDep(d.id, dep)
+        if (d.action === 'inserted' && deps.length) {
+          for (const dep of deps) this.store.addDep(d.id, dep)
+          // TOCTOU guard: verify ran BEFORE this lock. A concurrent reinforce(dep,'failure')
+          // could have demoted a sub-skill while this composite was mid-verify, and its cascade
+          // would have missed the not-yet-inserted composite. Now that the dep edges exist,
+          // re-check each dep's CURRENT status synchronously (no await -> no interleave). If any
+          // is no longer verified, quarantine this composite so it never sits verified atop an
+          // invalidated sub-skill. (Any reinforce that demotes a dep AFTER this check sees the
+          // edge and cascades the composite itself.)
+          const stale = deps.find((dep) => this.store.get(dep)?.status !== 'verified')
+          if (stale) {
+            this.store.updateStatus(d.id, 'quarantined')
+            return { id: d.id, status: 'quarantined', reason: 'sub-skill invalidated before commit' }
+          }
+        }
         retier(this.store, this.hotCap)
         return { id: d.id, status: 'verified', reason: d.action === 'inserted' ? undefined : d.action }
       })) as RememberResult

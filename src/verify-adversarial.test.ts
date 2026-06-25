@@ -67,6 +67,16 @@ describe('verify gate adversarial suite', () => {
     assert.notEqual(r.status, 'verified')
   })
 
+  test('acceptance test cannot forge a pass by trapping the outcome channel (defineProperty)', async () => {
+    // install a forged getter + no-op setter on the outcome channel, then fail a REAL assert.
+    // The outcome is read as the vm completion value (not a sandbox property), so the trap is
+    // inert and the genuine failure stands -> NOT verified.
+    const at =
+      'try { Object.defineProperty(globalThis, "__outcome", { configurable: true, get: () => ({ ac: 1, af: [], threw: false }), set() {} }) } catch (e) {} assert(run(3) === 999)'
+    const r = await verifySkill(mk('return 0', at))
+    assert.notEqual(r.status, 'verified')
+  })
+
   test('100 rapid verifications all complete (no worker leak)', async () => {
     const results: string[] = []
     for (let i = 0; i < 100; i++) {

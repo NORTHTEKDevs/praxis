@@ -111,6 +111,14 @@ describe('SkillStore', () => {
     assert.equal(store.findVerifiedByName('foo')?.id, id)
   })
 
+  test('listVerifiedNegatives is bounded by the limit and excludes positives', () => {
+    for (let i = 0; i < 5; i++) store.insert(mk({ name: `neg${i}`, kind: 'negative', status: 'verified' }))
+    store.insert(mk({ name: 'pos', status: 'verified' })) // positive must not appear
+    assert.equal(store.listVerifiedNegatives(2).length, 2)
+    assert.equal(store.listVerifiedNegatives().length, 5)
+    assert.ok(store.listVerifiedNegatives().every((s) => s.kind === 'negative'))
+  })
+
   test('skills persist across reopen (named file)', () => {
     const base = join(tmpdir(), 'praxis-persist-test.db')
     const clean = () => {
