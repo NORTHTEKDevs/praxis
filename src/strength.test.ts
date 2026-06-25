@@ -29,4 +29,13 @@ describe('computeCheckStrength', () => {
   test('multiline assert body still scores correctly', () => {
     assert.equal(computeCheckStrength('assert(\n  run(3) === 6\n)'), 1)
   })
+
+  test('a wrapped run(...) oracle is recognized (not false-quarantined)', () => {
+    assert.equal(computeCheckStrength('assert(JSON.stringify(run(3)) === "[1,2,3]")'), 1)
+    assert.equal(computeCheckStrength('assert(String(run(3)) === "6")'), 1)
+  })
+
+  test('a different identifier ending in run( does not count as run()', () => {
+    assert.equal(computeCheckStrength('assert(myrun(3) === 6)'), 0)
+  })
 })

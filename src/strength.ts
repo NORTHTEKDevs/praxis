@@ -16,7 +16,11 @@ export function computeCheckStrength(acceptanceTest: string): number {
     if (parts.length < 2) continue
     const lhs = parts[0]
     const rhs = parts.slice(1).join('==')
-    const isRun = (s: string) => /^\s*run\s*\(/.test(s.trim())
+    // run(...) anywhere in the operand, not just at the start, so a WRAPPED oracle like
+    // `assert(JSON.stringify(run(3)) === "[1,2,3]")` is recognized (was scored 0 -> a legit
+    // skill permanently quarantined). `run(` must be preceded by start-or-non-identifier so
+    // `myrun(x)` does not match.
+    const isRun = (s: string) => /(?:^|[^\w$])run\s*\(/.test(s)
     const hasLiteral = (s: string) => /(["'`])|(?:^|[^\w.])-?\d|\btrue\b|\bfalse\b|\bnull\b|\[|\{/.test(s)
     // a real oracle compares run(...) against a CONCRETE literal. literal-vs-literal
     // (assert("a" === "a")) and run-vs-run (self-referential) score 0: the implementation
