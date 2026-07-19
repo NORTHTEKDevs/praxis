@@ -51,6 +51,7 @@ export class SkillStore {
         retrieved_at INTEGER NOT NULL,
         PRIMARY KEY (skill_id, task)
       );
+      CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       -- hot read paths: listByStatus / listVerifiedHot / listVerifiedNegatives (status,kind,tier),
       -- findVerifiedByName (name), and dependentsOf (dep_id -- not covered by the deps PK prefix).
       CREATE INDEX IF NOT EXISTS idx_skills_status_kind_tier ON skills(status, kind, tier);
@@ -190,6 +191,19 @@ export class SkillStore {
     const m = new Map<string, number>()
     for (const r of rows) m.set((r as { skill_id: string }).skill_id, (r as { n: number }).n)
     return m
+  }
+
+  kvGet(key: string): string | undefined {
+    const row = this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined
+    return row?.value
+  }
+
+  kvSet(key: string, value: string): void {
+    this.db
+      .prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(key, value)
   }
 
   close(): void {

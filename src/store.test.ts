@@ -185,3 +185,15 @@ describe('SkillStore', () => {
     assert.deepEqual(got?.embedding, [0.5, 0.6, 0.7])
   })
 })
+
+describe('kv', () => {
+  test('get missing returns undefined, set/get round-trips, set overwrites', () => {
+    const store = new SkillStore()
+    assert.equal(store.kvGet('cursor'), undefined)
+    store.kvSet('cursor', '123')
+    assert.equal(store.kvGet('cursor'), '123')
+    store.kvSet('cursor', '456')
+    assert.equal(store.kvGet('cursor'), '456')
+    store.close()
+  })
+})
