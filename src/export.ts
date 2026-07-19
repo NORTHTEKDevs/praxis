@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { ingestLedger, type IngestResult } from './flywheel.ts'
 import type { Skill } from './skill.ts'
 import type { Praxis } from './praxis.ts'
 
@@ -199,4 +201,16 @@ export function syncSkills(px: Praxis, opts: { dir: string; prune?: boolean }): 
 
   writeFileSync(join(opts.dir, MANIFEST), JSON.stringify(manifest, null, 2))
   return res
+}
+
+// praxis sync = ingest flywheel usage first (so demotions/promotions reflect), then export
+// files that match the post-ingest truth. Ledger absent -> ingest is a no-op.
+export function fullSync(
+  px: Praxis,
+  opts: { dir: string; prune?: boolean; ledgerPath?: string },
+): { ingest: IngestResult; sync: SyncResult } {
+  const ledger = opts.ledgerPath ?? process.env.FLYWHEEL_LEDGER ?? join(homedir(), '.claude', 'state', 'ledger.jsonl')
+  const ingest = ingestLedger(px, opts.dir, ledger)
+  const sync = syncSkills(px, opts)
+  return { ingest, sync }
 }

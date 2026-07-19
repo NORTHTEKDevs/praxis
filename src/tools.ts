@@ -1,5 +1,8 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Praxis } from './praxis.ts'
 import { consolidate } from './consolidate.ts'
+import { fullSync } from './export.ts'
 
 export interface ToolResult {
   content: Array<{ type: 'text'; text: string }>
@@ -102,6 +105,29 @@ export function buildTools(px: Praxis): ToolDef[] {
       handler: async (a) => {
         px.pin(String(a.id), a.pinned !== false)
         return { ok: true }
+      },
+    },
+    {
+      name: 'sync_skills',
+      description:
+        'Compile verified hot skills to Claude Code SKILL.md dirs (praxis-* namespace). Idempotent; a skill that loses its proof gets its export marked stale. Ingests flywheel ledger usage first when present.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dir: str('target skills dir (default ./.claude/skills)'),
+          global: { type: 'boolean', description: 'target ~/.claude/skills instead' },
+          prune: { type: 'boolean', description: 'remove stale exports instead of marking them' },
+        },
+        additionalProperties: false,
+      },
+      handler: async (a) => {
+        const dir =
+          a.global === true
+            ? join(homedir(), '.claude', 'skills')
+            : typeof a.dir === 'string' && a.dir
+              ? a.dir
+              : join(process.cwd(), '.claude', 'skills')
+        return fullSync(px, { dir, prune: a.prune === true })
       },
     },
     {

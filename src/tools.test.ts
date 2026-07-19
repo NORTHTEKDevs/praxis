@@ -40,8 +40,8 @@ describe('MCP tools', () => {
     assert.ok('topSkills' in r)
   })
 
-  test('all 8 tools are exposed', () => {
-    assert.equal(buildTools(new Praxis()).length, 8)
+  test('all 9 tools are exposed', () => {
+    assert.equal(buildTools(new Praxis()).length, 9)
   })
 
   test('reinforce on a nonexistent id surfaces an MCP error envelope, not a silent success', async () => {
@@ -114,5 +114,22 @@ describe('MCP tools', () => {
     await byName(px, 'remember_skill').handler({ name: 'd', interface: '(n)->n', implementation: 'return input * 2', acceptanceTest: 'assert(run(3) === 6)', task: 'double a number' })
     const r = (await byName(px, 'recall_skills').handler({ query: 'double a number', tokenBudget: -1 })) as { skills: unknown[] }
     assert.ok(r.skills.length >= 1)
+  })
+})
+
+describe('sync_skills tool', () => {
+  test('exports to dir and reports counts + writes manifest', async () => {
+    const { mkdtempSync, existsSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'praxis-tool-sync-'))
+    process.env.FLYWHEEL_LEDGER = join(dir, 'no-ledger.jsonl') // keep the unit test off the real ledger
+    const px = new Praxis()
+    await byName(px, 'remember_skill').handler({ name: 'inc', interface: '(n)->n', implementation: 'return input + 1', acceptanceTest: 'assert(run(1) === 2)', task: 'increment' })
+    const r = (await byName(px, 'sync_skills').handler({ dir })) as { sync: { exported: number } }
+    assert.equal(r.sync.exported, 1)
+    assert.ok(existsSync(join(dir, '.praxis-manifest.json')))
+    delete process.env.FLYWHEEL_LEDGER
+    rmSync(dir, { recursive: true, force: true })
   })
 })

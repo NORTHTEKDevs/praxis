@@ -6,6 +6,7 @@ import { SkillStore } from './store.ts'
 import { Praxis } from './praxis.ts'
 import { HashingEmbedder } from './embedder.ts'
 import { consolidate, reindex } from './consolidate.ts'
+import { fullSync } from './export.ts'
 
 const DIR = env.PRAXIS_DIR ?? join(homedir(), '.praxis')
 const DB = join(DIR, 'praxis.db')
@@ -41,8 +42,18 @@ if (cmd === 'init') {
   console.log(JSON.stringify(await consolidate(open().store, new HashingEmbedder()), null, 2))
 } else if (cmd === 'reindex') {
   console.log(`reindexed ${await reindex(open().store, new HashingEmbedder())} skills`)
+} else if (cmd === 'sync') {
+  const args = argv.slice(3)
+  const dirFlag = args.indexOf('--dir')
+  const dir =
+    dirFlag !== -1 && args[dirFlag + 1]
+      ? args[dirFlag + 1]
+      : args.includes('--global')
+        ? join(homedir(), '.claude', 'skills')
+        : join(process.cwd(), '.claude', 'skills')
+  console.log(JSON.stringify(fullSync(open(), { dir, prune: args.includes('--prune') }), null, 2))
 } else if (cmd === 'serve') {
   await import('./mcp.ts')
 } else {
-  console.log('usage: praxis <init|serve|stats|consolidate|reindex>')
+  console.log('usage: praxis <init|serve|stats|consolidate|reindex|sync [--dir <path>|--global] [--prune]>')
 }
