@@ -17,3 +17,7 @@ jobs:
       # Trust-critical suite: verify gate, sandbox tamper, cascade invariant, concurrency.
       # Runs on Node's native test runner with type-stripping + experimental sqlite (no build step).
       - run: npm test
+      # Publish emit must stay green: the npm package ships plain JS from dist/ (Node refuses
+      # type-stripping under node_modules), so a broken build = an uninstallable release.
+      - run: npm run build
+      - run: node --experimental-sqlite dist/cli.js | grep -q "usage:"

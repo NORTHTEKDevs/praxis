@@ -1,0 +1,14 @@
+{
+  "//": "Publish-time emit only. Node 24 refuses type-stripping under node_modules, so the npm package ships plain JS in dist/ (praxis.mjs prefers dist/ when present). noCheck: transpile-only - type-awareness stays the editor tsconfig's job.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noCheck": true,
+    "outDir": "dist",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

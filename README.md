@@ -34,7 +34,7 @@ One honest caveat: Praxis makes your assistant *more reliable*, not *smarter*. T
 
 ## For developers
 
-Praxis is a small, dependency-light **MCP server**. Core and tests use **Node 24 built-ins only** (`node:sqlite`, `node:test`, native TypeScript type-stripping) - no build step. The only runtime dependency is the MCP SDK.
+Praxis is a small, dependency-light **MCP server**. Core and tests use **Node 24 built-ins only** (`node:sqlite`, `node:test`, native TypeScript type-stripping) - no build step for development. The published npm package ships precompiled plain JS (`tsc` at pack time only - Node refuses type-stripping under `node_modules`). The only runtime dependency is the MCP SDK.
 
 ### Install
 
@@ -68,9 +68,23 @@ The agent stays the brain; Praxis is the part that only keeps what's proven.
 
 ### Tools (MCP)
 
-`remember_skill` · `recall_skills` · `run_skill` · `record_failure` · `reinforce` · `library_stats` · `pin_skill` · `consolidate_now`
+`remember_skill` · `recall_skills` · `run_skill` · `record_failure` · `reinforce` · `library_stats` · `pin_skill` · `sync_skills` · `consolidate_now`
 
 `recall_skills` returns verified skills **and** relevant negative skills ("known failure modes") so the agent sees the wall it hit last time *before* it retries.
+
+### From proven skill to Claude Code skill
+
+`praxis sync` (also the `sync_skills` MCP tool) compiles your verified hot skills into real Claude Code skill directories:
+
+```bash
+praxis sync                 # -> ./.claude/skills/praxis-<name>/SKILL.md + impl.mjs
+praxis sync --global        # -> ~/.claude/skills/
+praxis sync --prune         # remove stale exports instead of marking them
+```
+
+Each exported skill carries its interface, the proven implementation, and the acceptance test it passed. The honesty guarantee travels with it: **no exported skill outlives its proof.** If a skill is later quarantined (a `reinforce` failure re-ran its test and it broke), demoted out of the hot tier, or evicted, the next sync rewrites its SKILL.md as `[STALE - failed re-verify]` (or removes it with `--prune`). Sync is idempotent, tracked by a manifest, and never touches skill files it didn't write.
+
+**Optional flywheel loop:** if [claude-code-flywheel](https://github.com/NORTHTEKDevs/claude-code-flywheel)'s Work Ledger is present (`~/.claude/state/ledger.jsonl` or `FLYWHEEL_LEDGER`), sync first ingests `praxis-*` skill firings as *usage* signal - feeding generality/utility scoring, so skills you actually use stay hot and skills you don't decay out. Fire events carry no outcome, so they are recorded as retrievals, never as fabricated successes. No flywheel installed: sync works identically minus the usage signal. Praxis reads the ledger file format only - there is no dependency between the projects.
 
 ### What keeps it from bloating / getting expensive
 
