@@ -41,10 +41,7 @@ Praxis is a small, dependency-light **MCP server**. Core and tests use **Node 24
 Requires Node 24+.
 
 ```bash
-# NOT YET ON NPM - publish is pending. Until it ships, install from source:
-# clone this repo, `npm install`, `npm pack` (compiles at pack time, see below),
-# then `npm i -g` the generated tarball.
-npm i -g @northtek/praxis   # once published, then:
+npm i -g @northtek/praxis
 praxis init
 ```
 
